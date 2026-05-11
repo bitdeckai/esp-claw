@@ -32,7 +32,7 @@ esp_err_t io_expander_factory_entry_t(i2c_master_bus_handle_t i2c_handle, const 
         return ret;
     }
 
-    /* EXP3: amplifier SD (off), EXP4: 3V3 peripherals enable (on). */
+    /* EXP3: amplifier SD (on), EXP4: 3V3 peripherals enable (on). */
     const uint32_t output_mask = IO_EXPANDER_PIN_NUM_3 | IO_EXPANDER_PIN_NUM_4;
     ret = esp_io_expander_set_dir(*handle_ret, output_mask, IO_EXPANDER_OUTPUT);
     if (ret != ESP_OK) {
@@ -40,9 +40,9 @@ esp_err_t io_expander_factory_entry_t(i2c_master_bus_handle_t i2c_handle, const 
         return ret;
     }
 
-    ret = esp_io_expander_set_level(*handle_ret, IO_EXPANDER_PIN_NUM_3, 0);
+    ret = esp_io_expander_set_level(*handle_ret, IO_EXPANDER_PIN_NUM_3, 1);
     if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to disable amplifier by default: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "Failed to enable amplifier by default: %s", esp_err_to_name(ret));
     }
 
     ret = esp_io_expander_set_level(*handle_ret, IO_EXPANDER_PIN_NUM_4, 1);

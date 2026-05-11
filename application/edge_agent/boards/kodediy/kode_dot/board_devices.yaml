@@ -13,9 +13,9 @@ devices:
         require: public
     config:
       max_pins: 16
-      # EXP3: amplifier SD (default off), EXP4: 3V3 peripherals enable (default on)
+      # EXP3: amplifier SD (default on), EXP4: 3V3 peripherals enable (default on)
       output_io_mask: [3, 4]
-      output_io_level_mask: [0, 1]
+      output_io_level_mask: [1, 1]
       input_io_mask: [0, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     peripherals:
       - name: i2c_master
@@ -85,7 +85,7 @@ devices:
         cs_gpio_num: 9
         dc_gpio_num: -1
         spi_mode: 0
-        pclk_hz: 40000000
+        pclk_hz: 30000000
         lcd_cmd_bits: 32
         flags:
           quad_mode: true

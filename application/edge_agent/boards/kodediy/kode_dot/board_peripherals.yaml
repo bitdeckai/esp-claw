@@ -87,10 +87,3 @@ peripherals:
       mode: GPIO_MODE_INPUT
       pull_up: true
 
-  # Display backlight control
-  - name: gpio_backlight
-    type: gpio
-    config:
-      pin: 22
-      mode: GPIO_MODE_OUTPUT
-      default_level: 1
