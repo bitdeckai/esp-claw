@@ -1,0 +1,193 @@
+# Devices Configuration for Kode Dot
+version: 1.0.0
+devices:
+
+  # TCA95xx 16-bit IO expander (7-bit addr 0x20, 8-bit value 0x40)
+  - name: gpio_expander
+    chip: tca9555
+    type: gpio_expander
+    version: default
+    dependencies:
+      espressif/esp_io_expander_tca95xx_16bit:
+        version: "*"
+        require: public
+    config:
+      max_pins: 16
+      # EXP3: amplifier SD (default off), EXP4: 3V3 peripherals enable (default on)
+      output_io_mask: [3, 4]
+      output_io_level_mask: [0, 1]
+      input_io_mask: [0, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    peripherals:
+      - name: i2c_master
+        i2c_addr: [0x40]
+
+  # Speaker path over I2S (amplifier enable via EXP3)
+  - name: audio_dac
+    chip: internal
+    type: audio_codec
+    version: default
+    config:
+      adc_enabled: false
+      dac_enabled: true
+      dac_max_channel: 1
+      dac_channel_mask: "1"
+      dac_init_gain: 0
+      mclk_enabled: false
+    peripherals:
+      - name: i2s_audio_out
+
+  # MEMS microphone path over I2S
+  - name: audio_adc
+    chip: internal
+    type: audio_codec
+    version: default
+    config:
+      adc_enabled: true
+      dac_enabled: false
+      adc_max_channel: 1
+      adc_channel_mask: "1"
+      adc_init_gain: 0
+      mclk_enabled: false
+    peripherals:
+      - name: i2s_audio_in
+
+  # microSD via SDMMC 1-bit mode: CMD=GPIO5, CLK=GPIO6, D0=GPIO7
+  - name: fs_sdcard
+    type: fs_fat
+    sub_type: sdmmc
+    version: default
+    config:
+      vfs_config:
+        format_if_mount_failed: true
+      sub_config:
+        bus_width: 1
+        slot_flags: "SDMMC_SLOT_FLAG_INTERNAL_PULLUP"
+        pins:
+          clk: 6
+          cmd: 5
+          d0: 7
+
+  # 2.13" AMOLED display (CO5300, QSPI)
+  - name: display_lcd
+    chip: co5300
+    type: display_lcd
+    sub_type: spi
+    version: default
+    dependencies:
+      kodediy/esp_lcd_co5300: "*"
+    config:
+      mirror_x: false
+      mirror_y: false
+      x_max: 410
+      y_max: 502
+      invert_color: false
+      io_spi_config:
+        cs_gpio_num: 9
+        dc_gpio_num: -1
+        spi_mode: 0
+        pclk_hz: 40000000
+        lcd_cmd_bits: 32
+        flags:
+          quad_mode: true
+      lcd_panel_config:
+        reset_gpio_num: 8
+        rgb_ele_order: LCD_RGB_ELEMENT_ORDER_RGB
+        bits_per_pixel: 16
+        data_endian: LCD_RGB_DATA_ENDIAN_BIG
+        flags:
+          reset_active_high: false
+    peripherals:
+      - name: spi_display
+
+  # Touch controller (CST820) on shared I2C bus
+  - name: lcd_touch
+    chip: cst820
+    type: lcd_touch_i2c
+    version: default
+    dependencies:
+      esp_lcd_touch:
+        version: "*"
+        require: public
+      kodediy/esp_lcd_touch_cst820: "*"
+    config:
+      io_i2c_config:
+        dev_addr: 0x15
+        scl_speed_hz: 400000
+        peripherals:
+          - name: i2c_master
+      touch_config:
+        x_max: 410
+        y_max: 502
+        int_gpio_num: -1
+        reset_gpio_num: 8
+
+  # WS2812B LED on GPIO4
+  - name: led_strip
+    chip: ws2812
+    type: custom
+    version: default
+    init_skip: true
+    dependencies:
+      espressif/led_strip:
+        version: "^3.0"
+        require: public
+    config:
+      max_leds: 1
+    peripherals:
+      - name: rmt_tx
+
+  # Optional logical devices exposed for scripts/features
+  - name: imu_sensor
+    chip: lsm6dsox
+    type: custom
+    version: default
+    init_skip: true
+    config:
+      i2c_addr: 0x6A
+      frequency: 400000
+    peripherals:
+      - name: i2c_master
+
+  - name: magnetometer
+    chip: lis2mdl
+    type: custom
+    version: default
+    init_skip: true
+    config:
+      i2c_addr: 0x1E
+      frequency: 400000
+    peripherals:
+      - name: i2c_master
+
+  - name: external_rtc
+    chip: max31329
+    type: custom
+    version: default
+    init_skip: true
+    config:
+      i2c_addr: 0x68
+      frequency: 400000
+    peripherals:
+      - name: i2c_master
+
+  - name: pmic
+    chip: bq25896
+    type: custom
+    version: default
+    init_skip: true
+    config:
+      i2c_addr: 0x6B
+      frequency: 400000
+    peripherals:
+      - name: i2c_master
+
+  - name: fuel_gauge
+    chip: bq27220
+    type: custom
+    version: default
+    init_skip: true
+    config:
+      i2c_addr: 0x55
+      frequency: 400000
+    peripherals:
+      - name: i2c_master

@@ -1,0 +1,96 @@
+version: 1.0.0
+# Peripherals Configuration for Kode Dot
+peripherals:
+  # Shared I2C bus: IO expander, touch, IMU, magnetometer, RTC, PMIC, fuel gauge
+  - name: i2c_master
+    type: i2c
+    role: master
+    config:
+      port: 0
+      pins:
+        sda: 48
+        scl: 47
+
+  # Shared I2S bus: MEMS microphone (DIN) and speaker amplifier (DOUT)
+  - name: i2s_audio_out
+    type: i2s
+    role: master
+    format: std-out
+    config: &i2s_kode_dot
+      port: 0
+      sample_rate_hz: 48000
+      mclk_multiple: 256
+      data_bit_width: 32
+      slot_bit_width: I2S_SLOT_BIT_WIDTH_AUTO
+      slot_mode: I2S_SLOT_MODE_MONO
+      slot_mask: I2S_STD_SLOT_LEFT
+      ws_width: 32
+      pins:
+        mclk: -1
+        bclk: 38
+        ws: 45
+        dout: 46
+        din: 21
+
+  - name: i2s_audio_in
+    type: i2s
+    role: master
+    format: std-in
+    config: *i2s_kode_dot
+
+  # QSPI bus for CO5300 AMOLED panel
+  - name: spi_display
+    type: spi
+    role: master
+    config:
+      spi_bus_config:
+        spi_port: SPI2_HOST
+        data0_io_num: 15
+        data1_io_num: 14
+        data2_io_num: 16
+        data3_io_num: 10
+        sclk_io_num: 17
+        max_transfer_sz: 16400
+
+  # WS2812B directional LED (single LED)
+  - name: rmt_tx
+    type: rmt
+    role: tx
+    config:
+      gpio_num: 4
+      clk_src: RMT_CLK_SRC_DEFAULT
+      resolution_hz: 10000000
+      mem_block_symbols: 64
+      trans_queue_depth: 4
+      intr_priority: 1
+      flags:
+        invert_out: false
+        with_dma: true
+        io_loop_back: false
+        io_od_mode: false
+        allow_pd: false
+        init_level: false
+
+  # Optional direct BOOT key access (top button)
+  - name: gpio_button_up
+    type: gpio
+    config:
+      pin: 0
+      mode: GPIO_MODE_INPUT
+      pull_up: true
+
+  # IO expander interrupt line
+  - name: gpio_expander_int
+    type: gpio
+    config:
+      pin: 18
+      mode: GPIO_MODE_INPUT
+      pull_up: true
+
+  # Display backlight control
+  - name: gpio_backlight
+    type: gpio
+    config:
+      pin: 22
+      mode: GPIO_MODE_OUTPUT
+      default_level: 1

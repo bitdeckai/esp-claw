@@ -1,0 +1,5 @@
+board: kode_dot
+chip: esp32s3
+version: 1.0.0
+description: "Kode Dot Development Board"
+manufacturer: "Kode DIY"
