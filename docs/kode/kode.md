@@ -76,3 +76,29 @@
 - Time sync succeeded
 - app> 命令行可交互
 
+### 7) Lua 音频自检脚本（喇叭/麦克风）
+
+以下命令在串口 `app>` 提示符下执行。
+
+1. 查看内置音频测试脚本:
+
+	lua --list --keyword audio
+
+2. 写入并运行喇叭蜂鸣脚本:
+
+	lua --write --path audio_beep.lua --content "local a=require('audio');local bm=require('board_manager');local c,r,ch,b=bm.get_audio_codec_output_params('audio_dac');print('out',c,r,ch,b);local o,e=a.new_output(c,r,ch,b,100);if not o then print('new_output fail',e) return end;a.play_tone(o,1000,800,100);a.play_tone(o,1500,800,100);a.play_tone(o,2000,800,100);a.close(o);print('beep done')"
+	lua --run --path audio_beep.lua --timeout-ms 10000
+
+3. 写入并运行录音回放脚本:
+
+	lua --write --path audio_loopback.lua --content "local a=require('audio');local bm=require('board_manager');local ic,ir,ich,ib=bm.get_audio_codec_input_params('audio_adc');local oc,orr,och,ob=bm.get_audio_codec_output_params('audio_dac');print('in',ic,ir,ich,ib,'out',oc,orr,och,ob);local i,ie=a.new_input(ic,ir,ich,ib);local o,oe=a.new_output(oc,orr,och,ob,100);if (not i) or (not o) then print('open fail',ie,oe) return end;local p='/fatfs/rec.wav';local info=a.record_wav(i,p,3000);print('rec',info and info.bytes);a.play_wav(o,p);a.close(o);a.close(i);print('loopback done')"
+	lua --run --path audio_loopback.lua --timeout-ms 20000
+
+4. 直接运行内置录音回放测试（推荐）:
+
+	lua --run --path builtin/test/audio_record_play.lua --timeout-ms 30000
+
+提示:
+- 如果出现 `/fatfs/scripts/xxx.lua:1: ')' expected near <eof>`，通常是串口输入过长被截断，重新执行 `lua --write` 即可。
+- 日志出现 `tone sequence done`、`recorded ... bytes=...`、`playback done` 可判定音频链路正常。
+
