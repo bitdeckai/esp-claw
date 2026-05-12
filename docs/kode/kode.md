@@ -102,3 +102,65 @@
 - 如果出现 `/fatfs/scripts/xxx.lua:1: ')' expected near <eof>`，通常是串口输入过长被截断，重新执行 `lua --write` 即可。
 - 日志出现 `tone sequence done`、`recorded ... bytes=...`、`playback done` 可判定音频链路正常。
 
+### 8) 微信接入（ClawBot）
+
+以下步骤适用于已经完成联网并能进入 `app>` 的设备。
+
+1. 在 Web 配置页完成微信登录
+- 打开 `http://esp-claw.local/` 或 `http://设备IP/`。
+- 在微信配置页面扫码登录 ClawBot，并确认状态为 connected/confirmed。
+
+2. 串口设置并启动微信网关
+
+	wechat --set-config --token <token> --base-url https://ilinkai.weixin.qq.com
+	wechat --start
+
+说明:
+- `token` 来自微信接入页面或二维码登录流程，不是微信开放平台的 AppSecret。
+- 如果看到 `WeChat gateway started`，表示网关已启动。
+
+3. 从串口日志获取真实 chat_id（推荐）
+
+给机器人发送一条消息后，在串口中查找如下日志:
+
+	cap_im_wechat: wechat parsed message from_user=... group_id=... chat_id=...
+
+或:
+
+	claw_event_router: processing event=... source=wechat_gateway channel=wechat chat=...
+
+其中 `chat_id`（或 `chat=` 后的值）就是发送命令要使用的目标 ID。
+
+示例:
+- `chat_id=o9cq801Mt6qr4aRdcozKl1BjPPhU@im.wechat`
+
+4. 主动发送消息
+
+	wechat --send-text <chat_id> --text nihao
+
+例如:
+
+	wechat --send-text o9cq801Mt6qr4aRdcozKl1BjPPhU@im.wechat --text nihao
+
+提示:
+- 文本不含空格时，建议不加引号，避免串口后台日志插入造成命令解析异常。
+- 文本含空格时可使用引号，并尽量整行一次性粘贴。
+
+5. 常见问题
+
+- `wechat: option "--text" requires an argument`
+
+  通常是命令被打断或引号未闭合，重新完整输入即可。
+
+- `wechat_send_text failed: ESP_ERR_INVALID_ARG`
+
+  常见原因是 `chat_id` 填错、`--text` 为空，或尚未成功执行 `wechat --set-config`。
+
+- `transport_base ... Connection reset by peer`
+
+  多见于复用连接被服务端关闭；若随后出现 `WeChat text sent`，说明已自动重试并发送成功。
+
+- `Rule im_any_message_agent agent action failed: ESP_ERR_INVALID_STATE`
+
+  表示 Agent/LLM 规则未满足运行条件（例如 LLM 配置未完成），不影响微信基础收发链路。
+

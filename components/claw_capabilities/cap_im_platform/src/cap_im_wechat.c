@@ -721,6 +721,13 @@ static esp_err_t cap_im_wechat_publish_inbound_text(const char *chat_id,
         return ESP_OK;
     }
 
+    ESP_LOGI(TAG,
+             "wechat inbound text chat=%s sender=%s message_id=%s len=%u",
+             chat_id ? chat_id : "(null)",
+             sender_id ? sender_id : "(null)",
+             message_id ? message_id : "(null)",
+             (unsigned int)strlen(content));
+
     return claw_event_router_publish_message("wechat_gateway",
                                              "wechat",
                                              chat_id,
@@ -1443,6 +1450,12 @@ static esp_err_t cap_im_wechat_process_message(cJSON *msg)
         free(text_buf);
         return ESP_ERR_INVALID_RESPONSE;
     }
+
+    ESP_LOGI(TAG,
+             "wechat parsed message from_user=%s group_id=%s chat_id=%s",
+             from_user_id ? from_user_id : "(null)",
+             group_id ? group_id : "(null)",
+             chat_id);
 
     snprintf(message_id_buf,
              sizeof(message_id_buf),
