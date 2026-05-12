@@ -191,3 +191,154 @@ devices:
       frequency: 400000
     peripherals:
       - name: i2c_master
+
+  # Six gamepad-style buttons: GPIO0 plus five keys on the TCA9555 expander.
+  - name: button_up
+    type: button
+    sub_type: gpio
+    config:
+      active_level: 0
+      long_press_time: 700
+      short_press_time: 100
+      events_cfg:
+        press_down: true
+        press_up: true
+        single_click: true
+        double_click: false
+        multi_click: false
+        click_counts: []
+        long_press_start: true
+        long_press_start_time: []
+        long_press_hold: false
+        long_press_up: true
+        long_press_up_time: []
+        press_repeat: false
+        press_repeat_done: false
+        press_end: false
+    peripherals:
+      - name: gpio_button_up
+
+  - name: pad_up
+    type: button
+    sub_type: io_expander
+    config:
+      expander_name: gpio_expander
+      pin_num: 6
+      active_level: 0
+      long_press_time: 700
+      short_press_time: 100
+      events_cfg:
+        press_down: true
+        press_up: true
+        single_click: true
+        double_click: false
+        multi_click: false
+        click_counts: []
+        long_press_start: true
+        long_press_start_time: []
+        long_press_hold: false
+        long_press_up: true
+        long_press_up_time: []
+        press_repeat: false
+        press_repeat_done: false
+        press_end: false
+
+  - name: pad_left
+    type: button
+    sub_type: io_expander
+    config:
+      expander_name: gpio_expander
+      pin_num: 7
+      active_level: 0
+      long_press_time: 700
+      short_press_time: 100
+      events_cfg:
+        press_down: true
+        press_up: true
+        single_click: true
+        double_click: false
+        multi_click: false
+        click_counts: []
+        long_press_start: true
+        long_press_start_time: []
+        long_press_hold: false
+        long_press_up: true
+        long_press_up_time: []
+        press_repeat: false
+        press_repeat_done: false
+        press_end: false
+
+  - name: pad_down
+    type: button
+    sub_type: io_expander
+    config:
+      expander_name: gpio_expander
+      pin_num: 8
+      active_level: 0
+      long_press_time: 700
+      short_press_time: 100
+      events_cfg:
+        press_down: true
+        press_up: true
+        single_click: true
+        double_click: false
+        multi_click: false
+        click_counts: []
+        long_press_start: true
+        long_press_start_time: []
+        long_press_hold: false
+        long_press_up: true
+        long_press_up_time: []
+        press_repeat: false
+        press_repeat_done: false
+        press_end: false
+
+  - name: button_down
+    type: button
+    sub_type: io_expander
+    config:
+      expander_name: gpio_expander
+      pin_num: 9
+      active_level: 0
+      long_press_time: 700
+      short_press_time: 100
+      events_cfg:
+        press_down: true
+        press_up: true
+        single_click: true
+        double_click: false
+        multi_click: false
+        click_counts: []
+        long_press_start: true
+        long_press_start_time: []
+        long_press_hold: false
+        long_press_up: true
+        long_press_up_time: []
+        press_repeat: false
+        press_repeat_done: false
+        press_end: false
+
+  - name: pad_right
+    type: button
+    sub_type: io_expander
+    config:
+      expander_name: gpio_expander
+      pin_num: 11
+      active_level: 0
+      long_press_time: 700
+      short_press_time: 100
+      events_cfg:
+        press_down: true
+        press_up: true
+        single_click: true
+        double_click: false
+        multi_click: false
+        click_counts: []
+        long_press_start: true
+        long_press_start_time: []
+        long_press_hold: false
+        long_press_up: true
+        long_press_up_time: []
+        press_repeat: false
+        press_repeat_done: false
+        press_end: false
