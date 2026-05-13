@@ -37,6 +37,9 @@ static const char *TAG = "wifi_manager";
 #ifndef CONFIG_APP_WIFI_MAX_RETRY
 #define CONFIG_APP_WIFI_MAX_RETRY 5
 #endif
+#ifndef CONFIG_APP_WIFI_MAX_TX_POWER_QDBM
+#define CONFIG_APP_WIFI_MAX_TX_POWER_QDBM 60
+#endif
 
 typedef enum {
     WIFI_MODE_OFF = 0,
@@ -79,6 +82,7 @@ static esp_err_t fallback_to_ap(void);
 static void reconnect_timer_cb(void *arg);
 static esp_err_t configure_sta_mode(const wifi_manager_config_t *config);
 static void reset_sta_runtime_state(void);
+static void apply_max_tx_power_limit(void);
 
 static const char *wifi_manager_ap_ssid_prefix(void)
 {
@@ -100,6 +104,34 @@ static uint8_t wifi_manager_ap_max_conn(void)
 static uint32_t wifi_manager_max_retry(void)
 {
     return s_config.max_retry ? s_config.max_retry : CONFIG_APP_WIFI_MAX_RETRY;
+}
+
+static int8_t wifi_manager_max_tx_power_qdbm(void)
+{
+    int value = CONFIG_APP_WIFI_MAX_TX_POWER_QDBM;
+    if (value < 8) {
+        value = 8;
+    } else if (value > 84) {
+        value = 84;
+    }
+    return (int8_t)value;
+}
+
+static void apply_max_tx_power_limit(void)
+{
+    int8_t max_tx_power = wifi_manager_max_tx_power_qdbm();
+    esp_err_t err = esp_wifi_set_max_tx_power(max_tx_power);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to set Wi-Fi max tx power to %d qdBm: %s",
+                 (int)max_tx_power,
+                 esp_err_to_name(err));
+        return;
+    }
+
+    ESP_LOGI(TAG,
+             "Wi-Fi max tx power capped at %d qdBm (%.2f dBm)",
+             (int)max_tx_power,
+             (float)max_tx_power / 4.0f);
 }
 
 static void compose_ap_ssid(void)
@@ -368,6 +400,8 @@ esp_err_t wifi_manager_start(const wifi_manager_config_t *config)
         s_wifi_started = true;
     }
 
+    apply_max_tx_power_limit();
+
     return ESP_OK;
 }
 
@@ -397,6 +431,8 @@ esp_err_t wifi_manager_apply_sta_config(const wifi_manager_config_t *config)
         }
         s_wifi_started = true;
     }
+
+    apply_max_tx_power_limit();
 
     if (!s_sta_configured) {
         return ESP_OK;

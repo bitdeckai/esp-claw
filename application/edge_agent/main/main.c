@@ -314,9 +314,14 @@ static void memory_monitor_task(void *arg)
 
 void app_main(void)
 {
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+
     esp_log_level_set("esp-x509-crt-bundle", ESP_LOG_WARN);
 
-    ESP_LOGI(TAG, "Starting app");
+    ESP_LOGI(TAG, "Starting app (reset_reason=%d)", (int)reset_reason);
+    if (reset_reason == ESP_RST_BROWNOUT) {
+        ESP_LOGW(TAG, "Previous reset was caused by brownout");
+    }
     ESP_ERROR_CHECK(app_allocate_runtime_state());
     ESP_ERROR_CHECK(init_nvs());
     ESP_ERROR_CHECK(app_config_init());

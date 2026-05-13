@@ -44,6 +44,16 @@ menu "Default Wi-Fi Settings"
             falls back to pure AP mode and waits for the user to provision
             new credentials.
 
+    config APP_WIFI_MAX_TX_POWER_QDBM
+        int "Wi-Fi max TX power (qdBm)"
+        range 8 84
+        default 60
+        help
+            Caps Wi-Fi RF transmit power in quarter-dBm units.
+            60 qdBm = 15 dBm, 80 qdBm = 20 dBm.
+            Lower values reduce current peaks and can help avoid brownout
+            on weak USB cables or marginal power supplies.
+
 endmenu
 
 endmenu
