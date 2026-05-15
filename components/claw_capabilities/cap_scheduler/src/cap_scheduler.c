@@ -588,11 +588,18 @@ static esp_err_t cap_scheduler_load_from_disk_locked(void)
 
     err = cap_scheduler_load_items(s_cap_scheduler.schedules_path, items, s_cap_scheduler.max_items, &item_count);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to load schedules from %s: %s",
-                 s_cap_scheduler.schedules_path,
-                 esp_err_to_name(err));
-        free(items);
-        return err;
+        if (err == ESP_ERR_INVALID_RESPONSE) {
+            ESP_LOGW(TAG,
+                     "Invalid scheduler file format at %s, fallback to empty schedule set",
+                     s_cap_scheduler.schedules_path);
+            item_count = 0;
+        } else {
+            ESP_LOGE(TAG, "Failed to load schedules from %s: %s",
+                     s_cap_scheduler.schedules_path,
+                     esp_err_to_name(err));
+            free(items);
+            return err;
+        }
     }
 
     memset(s_cap_scheduler.entries, 0, s_cap_scheduler.max_items * sizeof(cap_scheduler_entry_t));
