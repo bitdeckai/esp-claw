@@ -175,7 +175,7 @@ devices:
     chip: bq25896
     type: custom
     version: default
-    init_skip: true
+    init_skip: false
     config:
       i2c_addr: 0x6B
       frequency: 400000
