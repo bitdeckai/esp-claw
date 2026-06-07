@@ -20,6 +20,21 @@ local INTERVAL_MS = int_arg("interval_ms", 1000)
 local gauge
 local bus
 
+local function current_state_text(current_ma)
+    if type(current_ma) ~= "number" then
+        return nil
+    end
+    -- BQ27220 sign convention used here:
+    --   current < 0: charging, current > 0: discharging.
+    if current_ma < -5 then
+        return "charging"
+    end
+    if current_ma > 5 then
+        return "discharging"
+    end
+    return "idle"
+end
+
 local function cleanup()
     if gauge then
         pcall(function()
@@ -52,15 +67,18 @@ local function run()
 
     for i = 1, SAMPLE_COUNT do
         local sample = gauge:read()
+        local state = current_state_text(sample.current_ma)
         local current_str = sample.current_ma
             and string.format(" current=%dmA", sample.current_ma)
             or ""
+        local state_str = state and string.format(" state=%s", state) or ""
         print(string.format(
-            "[fuel_gauge] #%d soc=%d%% voltage=%dmV%s",
+            "[fuel_gauge] #%d soc=%d%% voltage=%dmV%s%s",
             i,
             sample.soc,
             sample.voltage_mv,
-            current_str
+            current_str,
+            state_str
         ))
         delay.delay_ms(INTERVAL_MS)
     end

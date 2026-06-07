@@ -37,7 +37,8 @@ static const char *TAG = "app_emote";
 #define EMOTE_BADGE_ANIM_TASK_STACK (6 * 1024)
 #define EMOTE_IM_BOUNCE_PIXELS 3
 #define EMOTE_TIME_UPDATE_MS 1000
-#define EMOTE_IM_BOUNCE_PULSE_MS 240
+#define EMOTE_IM_BOUNCE_STEP_MS 150
+#define EMOTE_IM_BOUNCE_STEPS 6
 
 #define EMOTE_COLOR_DIM_HEX      0x7A7A7A
 #define EMOTE_COLOR_LLM_ON_HEX   0x4DD488
@@ -67,7 +68,7 @@ typedef struct {
     gfx_obj_t *llm_labels[EMOTE_LLM_COUNT];
     gfx_obj_t *im_labels[EMOTE_IM_COUNT];
     gfx_obj_t *center_logo;
-    gfx_obj_t *time_label;
+    gfx_obj_t *clock_label;
     gfx_obj_t *llm_icons[EMOTE_LLM_COUNT];
     gfx_obj_t *im_icons[EMOTE_IM_COUNT];
     gfx_image_dsc_t center_logo_dsc;
@@ -81,8 +82,8 @@ typedef struct {
     bool llm_icon_loaded_configured[EMOTE_LLM_COUNT];
     bool im_icon_loaded_configured[EMOTE_IM_COUNT];
     int im_anim_phase;
-    char time_text_cache[32];
-    bool time_text_cached;
+    char clock_text_cache[16];
+    bool clock_text_cached;
     gfx_coord_t llm_base_x[EMOTE_LLM_COUNT];
     gfx_coord_t llm_base_y[EMOTE_LLM_COUNT];
     gfx_coord_t im_base_x[EMOTE_IM_COUNT];
@@ -282,42 +283,40 @@ static bool emote_load_logo_to_dsc(const char *icon_name, gfx_image_dsc_t *out_d
 
 static void emote_update_time_label_locked(void)
 {
-    char time_text[32] = "----/--/--\n--:--:--";
+    char clock_text[16] = "--:--:--";
     time_t now;
     struct tm local_tm = {0};
-    uint16_t w = 0;
-    uint16_t h = 0;
-    gfx_coord_t x;
-    gfx_coord_t y;
+    uint16_t w_clock = 0;
+    uint16_t h_clock = 0;
+    gfx_coord_t x_clock;
+    gfx_coord_t y_clock;
+    const int bottom_pad = 3;
 
-    if (!s_provider_badges.time_label) {
+    if (!s_provider_badges.clock_label) {
         return;
     }
 
     now = time(NULL);
     if (now >= EMOTE_MIN_VALID_EPOCH && localtime_r(&now, &local_tm) != NULL) {
-        // Split into two shorter lines to avoid marquee/truncation on rounded displays.
-        strftime(time_text, sizeof(time_text), "%Y-%m-%d\n%H:%M:%S", &local_tm);
+        strftime(clock_text, sizeof(clock_text), "%H:%M:%S", &local_tm);
     }
 
-    if (!s_provider_badges.time_text_cached || strcmp(s_provider_badges.time_text_cache, time_text) != 0) {
-        gfx_label_set_text(s_provider_badges.time_label, time_text);
-        strncpy(s_provider_badges.time_text_cache, time_text, sizeof(s_provider_badges.time_text_cache) - 1);
-        s_provider_badges.time_text_cache[sizeof(s_provider_badges.time_text_cache) - 1] = '\0';
-        s_provider_badges.time_text_cached = true;
+    if (!s_provider_badges.clock_text_cached || strcmp(s_provider_badges.clock_text_cache, clock_text) != 0) {
+        gfx_label_set_text(s_provider_badges.clock_label, clock_text);
+        strncpy(s_provider_badges.clock_text_cache, clock_text, sizeof(s_provider_badges.clock_text_cache) - 1);
+        s_provider_badges.clock_text_cache[sizeof(s_provider_badges.clock_text_cache) - 1] = '\0';
+        s_provider_badges.clock_text_cached = true;
     }
 
-    gfx_obj_get_size(s_provider_badges.time_label, &w, &h);
-    x = (gfx_coord_t)((s_lcd_width - (int)w) / 2);
-    y = (gfx_coord_t)(s_lcd_height - (int)h - 4);
-    if (y < 0) {
-        y = 0;
-    }
+    gfx_obj_get_size(s_provider_badges.clock_label, &w_clock, &h_clock);
 
-    gfx_obj_set_pos(s_provider_badges.time_label, x, y);
-    gfx_label_set_color(s_provider_badges.time_label, GFX_COLOR_HEX(0xF2F2F2));
-    gfx_label_set_bg_enable(s_provider_badges.time_label, false);
-    gfx_obj_set_visible(s_provider_badges.time_label, true);
+    y_clock = (gfx_coord_t)(s_lcd_height - (int)h_clock - bottom_pad);
+    x_clock = (gfx_coord_t)((s_lcd_width - (int)w_clock) / 2);
+
+    gfx_obj_set_pos(s_provider_badges.clock_label, x_clock, y_clock);
+    gfx_label_set_color(s_provider_badges.clock_label, GFX_COLOR_HEX(0xF2F2F2));
+    gfx_label_set_bg_enable(s_provider_badges.clock_label, false);
+    gfx_obj_set_visible(s_provider_badges.clock_label, true);
 }
 
 static void emote_update_provider_badges_locked(void)
@@ -339,8 +338,10 @@ static void emote_update_provider_badges_locked(void)
     if (s_provider_badges.active_im_index >= 0 &&
             (now_ms - s_provider_badges.active_im_mark_ms) < 2500) {
         int64_t elapsed_ms = now_ms - s_provider_badges.active_im_mark_ms;
-        if (elapsed_ms < EMOTE_IM_BOUNCE_PULSE_MS) {
-            bounce_y_ofs = -EMOTE_IM_BOUNCE_PIXELS;
+        int64_t bounce_window_ms = (int64_t)EMOTE_IM_BOUNCE_STEP_MS * EMOTE_IM_BOUNCE_STEPS;
+        if (elapsed_ms < bounce_window_ms) {
+            int step = (int)(elapsed_ms / EMOTE_IM_BOUNCE_STEP_MS);
+            bounce_y_ofs = (step % 2 == 0) ? -EMOTE_IM_BOUNCE_PIXELS : EMOTE_IM_BOUNCE_PIXELS;
         }
     }
 
@@ -438,7 +439,7 @@ static void emote_create_provider_badges(void)
         "im_wechat_logo", "im_qq_logo", "im_feishu_logo", "im_telegram_logo"
     };
     static const char *center_logo_obj_name = "center_claw_logo";
-    static const char *time_label_obj_name = "bottom_time_label";
+    static const char *clock_label_obj_name = "bottom_clock_label";
     static const char *im_texts[EMOTE_IM_COUNT] = {
         "WX", "QQ", "FS", "TG"
     };
@@ -471,9 +472,9 @@ static void emote_create_provider_badges(void)
         gfx_obj_set_visible(s_provider_badges.center_logo, false);
     }
 
-    s_provider_badges.time_label = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_LABEL, time_label_obj_name);
-    if (s_provider_badges.time_label) {
-        gfx_obj_set_visible(s_provider_badges.time_label, true);
+    s_provider_badges.clock_label = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_LABEL, clock_label_obj_name);
+    if (s_provider_badges.clock_label) {
+        gfx_obj_set_visible(s_provider_badges.clock_label, true);
     }
 
     // Keep default eye/swim animation visible; provider rows are arranged around its occupied center area.
@@ -585,7 +586,14 @@ static void emote_badge_anim_task_entry(void *arg)
 
         if (s_provider_badges.active_im_index >= 0) {
             int64_t elapsed_ms = now_ms - s_provider_badges.active_im_mark_ms;
-            int new_phase = (elapsed_ms < EMOTE_IM_BOUNCE_PULSE_MS) ? 1 : 2;
+            int64_t bounce_window_ms = (int64_t)EMOTE_IM_BOUNCE_STEP_MS * EMOTE_IM_BOUNCE_STEPS;
+            int new_phase = 1;
+
+            if (elapsed_ms < bounce_window_ms) {
+                new_phase = 1 + (int)(elapsed_ms / EMOTE_IM_BOUNCE_STEP_MS);
+            } else {
+                new_phase = EMOTE_IM_BOUNCE_STEPS + 1;
+            }
 
             if (elapsed_ms >= EMOTE_BADGE_ACTIVE_MS) {
                 s_provider_badges.active_im_index = -1;

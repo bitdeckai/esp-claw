@@ -41,6 +41,14 @@ If `bus` is omitted, the library creates and owns the I2C bus and will close it 
 - `gauge:read()`: returns `{ voltage_mv = number, current_ma = number, soc = number }`.
 - `gauge:close()`: closes the I2C device and, if owned by the gauge, the I2C bus.
 
+## Current sign convention
+
+For BQ27220 in this project:
+
+- `current_ma < 0`: charging
+- `current_ma > 0`: discharging
+- near `0`: idle/trickle
+
 ## Example
 
 ```lua
