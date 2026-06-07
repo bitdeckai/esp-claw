@@ -29,13 +29,14 @@ static const char *TAG = "app_emote";
 #define EMOTE_MIN_VALID_EPOCH 1700000000
 #define EMOTE_LLM_COUNT 4
 #define EMOTE_IM_COUNT 4
-#define EMOTE_PROVIDER_ICON_SIZE 72
+#define EMOTE_PROVIDER_ICON_SIZE 48
 #define EMOTE_LLM_EXTRA_UP 78
 #define EMOTE_CENTER_OCCUPY_Y_OFFSET 20
-#define EMOTE_ROW_OUTWARD_SPREAD 10
 #define EMOTE_BADGE_ANIM_PERIOD_MS 180
 #define EMOTE_BADGE_ACTIVE_MS 2500
 #define EMOTE_BADGE_ANIM_TASK_STACK (6 * 1024)
+#define EMOTE_IM_BOUNCE_PIXELS 3
+#define EMOTE_TIME_UPDATE_MS 1000
 
 #define EMOTE_COLOR_DIM_HEX      0x7A7A7A
 #define EMOTE_COLOR_LLM_ON_HEX   0x4DD488
@@ -65,6 +66,7 @@ typedef struct {
     gfx_obj_t *llm_labels[EMOTE_LLM_COUNT];
     gfx_obj_t *im_labels[EMOTE_IM_COUNT];
     gfx_obj_t *center_logo;
+    gfx_obj_t *time_label;
     gfx_obj_t *llm_icons[EMOTE_LLM_COUNT];
     gfx_obj_t *im_icons[EMOTE_IM_COUNT];
     gfx_image_dsc_t center_logo_dsc;
@@ -75,6 +77,8 @@ typedef struct {
     void *im_icon_cache[EMOTE_IM_COUNT];
     bool llm_icon_ready[EMOTE_LLM_COUNT];
     bool im_icon_ready[EMOTE_IM_COUNT];
+    bool llm_icon_loaded_configured[EMOTE_LLM_COUNT];
+    bool im_icon_loaded_configured[EMOTE_IM_COUNT];
     gfx_coord_t llm_base_x[EMOTE_LLM_COUNT];
     gfx_coord_t llm_base_y[EMOTE_LLM_COUNT];
     gfx_coord_t im_base_x[EMOTE_IM_COUNT];
@@ -271,6 +275,28 @@ static bool emote_load_logo_to_dsc(const char *icon_name, gfx_image_dsc_t *out_d
     return true;
 }
 
+static void emote_update_time_label_locked(void)
+{
+    char time_text[32] = "----/--/-- --:--:--";
+    time_t now;
+    struct tm local_tm = {0};
+
+    if (!s_provider_badges.time_label) {
+        return;
+    }
+
+    now = time(NULL);
+    if (now >= EMOTE_MIN_VALID_EPOCH && localtime_r(&now, &local_tm) != NULL) {
+        strftime(time_text, sizeof(time_text), "%Y-%m-%d %H:%M:%S", &local_tm);
+    }
+
+    gfx_obj_set_pos(s_provider_badges.time_label, 6, (gfx_coord_t)(s_lcd_height - 18));
+    gfx_label_set_color(s_provider_badges.time_label, GFX_COLOR_HEX(0xF2F2F2));
+    gfx_label_set_bg_enable(s_provider_badges.time_label, false);
+    gfx_label_set_text(s_provider_badges.time_label, time_text);
+    gfx_obj_set_visible(s_provider_badges.time_label, true);
+}
+
 static void emote_update_provider_badges_locked(void)
 {
     static const uint32_t k_dim = EMOTE_COLOR_DIM_HEX;
@@ -285,9 +311,11 @@ static void emote_update_provider_badges_locked(void)
         return;
     }
 
+    emote_update_time_label_locked();
+
     if (s_provider_badges.active_im_index >= 0 &&
             (now_ms - s_provider_badges.active_im_mark_ms) < 2500) {
-        bounce_y_ofs = ((now_ms / 180) % 2 == 0) ? -1 : 1;
+        bounce_y_ofs = ((now_ms / EMOTE_BADGE_ANIM_PERIOD_MS) % 2 == 0) ? -EMOTE_IM_BOUNCE_PIXELS : EMOTE_IM_BOUNCE_PIXELS;
     }
 
     if (s_provider_badges.center_logo) {
@@ -299,16 +327,25 @@ static void emote_update_provider_badges_locked(void)
         const bool configured = s_provider_badges.llm_configured[i];
         const char *icon_name = configured ? s_llm_logo_color[i] : s_llm_logo_gray[i];
 
-        if (s_provider_badges.llm_icons[i] && emote_load_logo_to_dsc(icon_name, &s_provider_badges.llm_icon_dsc[i])) {
+        if (s_provider_badges.llm_icons[i] &&
+                (!s_provider_badges.llm_icon_ready[i] ||
+                 s_provider_badges.llm_icon_loaded_configured[i] != configured) &&
+                emote_load_logo_to_dsc(icon_name, &s_provider_badges.llm_icon_dsc[i])) {
             gfx_img_set_src(s_provider_badges.llm_icons[i], &s_provider_badges.llm_icon_dsc[i]);
+            s_provider_badges.llm_icon_loaded_configured[i] = configured;
+            s_provider_badges.llm_icon_ready[i] = true;
+        }
+
+        if (s_provider_badges.llm_icons[i] && s_provider_badges.llm_icon_ready[i]) {
             gfx_obj_set_pos(s_provider_badges.llm_icons[i], s_provider_badges.llm_base_x[i], s_provider_badges.llm_base_y[i]);
             gfx_obj_set_visible(s_provider_badges.llm_icons[i], true);
-            s_provider_badges.llm_icon_ready[i] = true;
             if (s_provider_badges.llm_labels[i]) {
                 gfx_obj_set_visible(s_provider_badges.llm_labels[i], false);
             }
             continue;
         }
+
+        s_provider_badges.llm_icon_ready[i] = false;
 
         if (s_provider_badges.llm_labels[i]) {
             gfx_label_set_color(s_provider_badges.llm_labels[i], GFX_COLOR_HEX(configured ? k_llm_on : k_dim));
@@ -329,16 +366,25 @@ static void emote_update_provider_badges_locked(void)
             y += bounce_y_ofs;
         }
 
-        if (s_provider_badges.im_icons[i] && emote_load_logo_to_dsc(icon_name, &s_provider_badges.im_icon_dsc[i])) {
+        if (s_provider_badges.im_icons[i] &&
+                (!s_provider_badges.im_icon_ready[i] ||
+                 s_provider_badges.im_icon_loaded_configured[i] != configured) &&
+                emote_load_logo_to_dsc(icon_name, &s_provider_badges.im_icon_dsc[i])) {
             gfx_img_set_src(s_provider_badges.im_icons[i], &s_provider_badges.im_icon_dsc[i]);
+            s_provider_badges.im_icon_loaded_configured[i] = configured;
+            s_provider_badges.im_icon_ready[i] = true;
+        }
+
+        if (s_provider_badges.im_icons[i] && s_provider_badges.im_icon_ready[i]) {
             gfx_obj_set_pos(s_provider_badges.im_icons[i], s_provider_badges.im_base_x[i], y);
             gfx_obj_set_visible(s_provider_badges.im_icons[i], true);
-            s_provider_badges.im_icon_ready[i] = true;
             if (s_provider_badges.im_labels[i]) {
                 gfx_obj_set_visible(s_provider_badges.im_labels[i], false);
             }
             continue;
         }
+
+        s_provider_badges.im_icon_ready[i] = false;
 
         if (s_provider_badges.im_labels[i]) {
             gfx_label_set_color(s_provider_badges.im_labels[i], GFX_COLOR_HEX(color));
@@ -366,36 +412,16 @@ static void emote_create_provider_badges(void)
         "im_wechat_logo", "im_qq_logo", "im_feishu_logo", "im_telegram_logo"
     };
     static const char *center_logo_obj_name = "center_claw_logo";
+    static const char *time_label_obj_name = "bottom_time_label";
     static const char *im_texts[EMOTE_IM_COUNT] = {
         "WX", "QQ", "FS", "TG"
     };
-    static const int row_spread_offset[4] = {
-        -EMOTE_ROW_OUTWARD_SPREAD,
-        -(EMOTE_ROW_OUTWARD_SPREAD / 3),
-        (EMOTE_ROW_OUTWARD_SPREAD / 3),
-        EMOTE_ROW_OUTWARD_SPREAD,
-    };
-    int margin;
-    int slot_w;
     const int icon_size = EMOTE_PROVIDER_ICON_SIZE;
     int center_y;
     int row_gap;
     int llm_y;
     int im_y;
     int i;
-
-    margin = (s_lcd_width - icon_size * 4) / 2;
-    if (margin < 4) {
-        margin = 4;
-    }
-
-    slot_w = icon_size;
-    if ((margin * 2 + slot_w * 4) > s_lcd_width) {
-        slot_w = (s_lcd_width - margin * 2) / 4;
-    }
-    if (slot_w < 40) {
-        slot_w = 40;
-    }
 
     // `eye_anim` in layout is aligned to center with y=20, use the same occupied center line as anchor.
     center_y = (s_lcd_height / 2) + EMOTE_CENTER_OCCUPY_Y_OFFSET;
@@ -419,13 +445,18 @@ static void emote_create_provider_badges(void)
         gfx_obj_set_visible(s_provider_badges.center_logo, false);
     }
 
+    s_provider_badges.time_label = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_LABEL, time_label_obj_name);
+    if (s_provider_badges.time_label) {
+        gfx_obj_set_visible(s_provider_badges.time_label, true);
+    }
+
     // Keep default eye/swim animation visible; provider rows are arranged around its occupied center area.
     emote_set_anim_visible(s_emote_handle, true);
 
     for (i = 0; i < EMOTE_LLM_COUNT; ++i) {
         gfx_obj_t *obj = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_LABEL, llm_obj_names[i]);
         gfx_obj_t *icon_obj = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_IMAGE, llm_icon_obj_names[i]);
-        gfx_coord_t x = (gfx_coord_t)(margin + i * slot_w + row_spread_offset[i]);
+        gfx_coord_t x = (gfx_coord_t)(((i + 1) * s_lcd_width) / (EMOTE_LLM_COUNT + 1) - (icon_size / 2));
         if (!obj) {
             ESP_LOGW(TAG, "create llm badge failed: %s", llm_obj_names[i]);
             continue;
@@ -449,7 +480,7 @@ static void emote_create_provider_badges(void)
     for (i = 0; i < EMOTE_IM_COUNT; ++i) {
         gfx_obj_t *obj = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_LABEL, im_obj_names[i]);
         gfx_obj_t *icon_obj = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_IMAGE, im_icon_obj_names[i]);
-        gfx_coord_t x = (gfx_coord_t)(margin + i * slot_w + 2 + row_spread_offset[i]);
+        gfx_coord_t x = (gfx_coord_t)(((i + 1) * s_lcd_width) / (EMOTE_IM_COUNT + 1) - (icon_size / 2));
         if (!obj) {
             ESP_LOGW(TAG, "create im badge failed: %s", im_obj_names[i]);
             continue;
@@ -506,18 +537,34 @@ static void emote_on_owner_changed(display_arbiter_owner_t owner, void *user_ctx
 
 static void emote_badge_anim_task_entry(void *arg)
 {
+    int64_t last_time_update_ms = 0;
+
     (void)arg;
 
     while (true) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        bool need_refresh = false;
+        int64_t now_ms;
 
-        while (s_emote_handle && s_provider_badges.created && s_provider_badges.active_im_index >= 0) {
-            int64_t now_ms = esp_timer_get_time() / 1000;
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(EMOTE_BADGE_ANIM_PERIOD_MS));
 
+        if (!s_emote_handle || !s_provider_badges.created) {
+            continue;
+        }
+
+        now_ms = esp_timer_get_time() / 1000;
+        if ((now_ms - last_time_update_ms) >= EMOTE_TIME_UPDATE_MS) {
+            need_refresh = true;
+            last_time_update_ms = now_ms;
+        }
+
+        if (s_provider_badges.active_im_index >= 0) {
+            need_refresh = true;
             if ((now_ms - s_provider_badges.active_im_mark_ms) >= EMOTE_BADGE_ACTIVE_MS) {
                 s_provider_badges.active_im_index = -1;
             }
+        }
 
+        if (need_refresh) {
             emote_lock(s_emote_handle);
             emote_update_provider_badges_locked();
             emote_unlock(s_emote_handle);
@@ -525,12 +572,6 @@ static void emote_badge_anim_task_entry(void *arg)
             if (display_arbiter_is_owner(DISPLAY_ARBITER_OWNER_EMOTE)) {
                 emote_notify_all_refresh(s_emote_handle);
             }
-
-            if (s_provider_badges.active_im_index < 0) {
-                break;
-            }
-
-            vTaskDelay(pdMS_TO_TICKS(EMOTE_BADGE_ANIM_PERIOD_MS));
         }
     }
 }
@@ -656,30 +697,6 @@ static esp_err_t emote_apply(const char *idle, const char *msg)
     return ESP_OK;
 }
 
-static void emote_append_time_suffix(char *msg, size_t msg_size)
-{
-    time_t now;
-    struct tm local_tm = {0};
-    char time_text[16] = "--:--:--";
-    size_t len;
-
-    if (!msg || msg_size == 0) {
-        return;
-    }
-
-    now = time(NULL);
-    if (now >= EMOTE_MIN_VALID_EPOCH && localtime_r(&now, &local_tm) != NULL) {
-        strftime(time_text, sizeof(time_text), "%H:%M:%S", &local_tm);
-    }
-
-    len = strlen(msg);
-    if (len >= msg_size - 1) {
-        return;
-    }
-
-    snprintf(msg + len, msg_size - len, " | %s", time_text);
-}
-
 esp_err_t emote_set_network_status(bool sta_connected, const char *ap_ssid)
 {
     ESP_RETURN_ON_FALSE(s_emote_handle != NULL, ESP_ERR_INVALID_STATE, TAG, "emote handle is NULL");
@@ -697,8 +714,6 @@ esp_err_t emote_set_network_status(bool sta_connected, const char *ap_ssid)
     } else {
         snprintf(msg, sizeof(msg), "Wi-Fi offline");
     }
-
-    emote_append_time_suffix(msg, sizeof(msg));
 
     return emote_apply(idle, msg);
 }
@@ -840,6 +855,18 @@ static esp_err_t emote_init_internal(void)
     }
 
     emote_create_provider_badges();
+
+    if (!s_badge_anim_task) {
+        if (xTaskCreate(emote_badge_anim_task_entry,
+                        "emote_badge",
+                        EMOTE_BADGE_ANIM_TASK_STACK,
+                        NULL,
+                        tskIDLE_PRIORITY + 2,
+                        &s_badge_anim_task) != pdPASS) {
+            s_badge_anim_task = NULL;
+            ESP_LOGW(TAG, "create emote badge task failed");
+        }
+    }
 
     return emote_set_network_status(false, NULL);
 }
