@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
+set(PROJECT_VER "0.1.0")
+
 include("${CMAKE_SOURCE_DIR}/tools/cmake/esp_idf_patch.cmake")
 include("${CMAKE_SOURCE_DIR}/tools/cmake/flash_partition_defaults.cmake")
 

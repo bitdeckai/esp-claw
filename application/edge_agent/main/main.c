@@ -15,6 +15,7 @@
 #include "esp_vfs_fat.h"
 #include "esp_log.h"
 #include "esp_err.h"
+#include "esp_app_desc.h"
 #include "esp_system.h"
 #include "esp_board_manager_includes.h"
 #include "captive_dns.h"
@@ -314,10 +315,15 @@ static void memory_monitor_task(void *arg)
 
 void app_main(void)
 {
+    const esp_app_desc_t *app_desc = esp_app_get_description();
     esp_reset_reason_t reset_reason = esp_reset_reason();
 
     esp_log_level_set("esp-x509-crt-bundle", ESP_LOG_WARN);
 
+    ESP_LOGI(TAG, "Firmware: project=%s version=%s idf=%s",
+             app_desc->project_name,
+             app_desc->version,
+             app_desc->idf_ver);
     ESP_LOGI(TAG, "Starting app (reset_reason=%d)", (int)reset_reason);
     if (reset_reason == ESP_RST_BROWNOUT) {
         ESP_LOGW(TAG, "Previous reset was caused by brownout");
