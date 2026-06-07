@@ -37,6 +37,7 @@ static const char *TAG = "app_emote";
 #define EMOTE_BADGE_ANIM_TASK_STACK (6 * 1024)
 #define EMOTE_IM_BOUNCE_PIXELS 3
 #define EMOTE_TIME_UPDATE_MS 1000
+#define EMOTE_IM_BOUNCE_PULSE_MS 240
 
 #define EMOTE_COLOR_DIM_HEX      0x7A7A7A
 #define EMOTE_COLOR_LLM_ON_HEX   0x4DD488
@@ -79,6 +80,9 @@ typedef struct {
     bool im_icon_ready[EMOTE_IM_COUNT];
     bool llm_icon_loaded_configured[EMOTE_LLM_COUNT];
     bool im_icon_loaded_configured[EMOTE_IM_COUNT];
+    int im_anim_phase;
+    char time_text_cache[32];
+    bool time_text_cached;
     gfx_coord_t llm_base_x[EMOTE_LLM_COUNT];
     gfx_coord_t llm_base_y[EMOTE_LLM_COUNT];
     gfx_coord_t im_base_x[EMOTE_IM_COUNT];
@@ -124,6 +128,7 @@ static TaskHandle_t s_badge_anim_task;
 static emote_provider_badges_t s_provider_badges = {
     .active_im_index = -1,
     .active_im_mark_ms = 0,
+    .im_anim_phase = 0,
 };
 
 extern const void *emote_acquire_data(emote_handle_t handle, const void *data_ref, size_t size, void **output_ptr);
@@ -277,9 +282,13 @@ static bool emote_load_logo_to_dsc(const char *icon_name, gfx_image_dsc_t *out_d
 
 static void emote_update_time_label_locked(void)
 {
-    char time_text[32] = "----/--/-- --:--:--";
+    char time_text[32] = "----/--/--\n--:--:--";
     time_t now;
     struct tm local_tm = {0};
+    uint16_t w = 0;
+    uint16_t h = 0;
+    gfx_coord_t x;
+    gfx_coord_t y;
 
     if (!s_provider_badges.time_label) {
         return;
@@ -287,13 +296,27 @@ static void emote_update_time_label_locked(void)
 
     now = time(NULL);
     if (now >= EMOTE_MIN_VALID_EPOCH && localtime_r(&now, &local_tm) != NULL) {
-        strftime(time_text, sizeof(time_text), "%Y-%m-%d %H:%M:%S", &local_tm);
+        // Split into two shorter lines to avoid marquee/truncation on rounded displays.
+        strftime(time_text, sizeof(time_text), "%Y-%m-%d\n%H:%M:%S", &local_tm);
     }
 
-    gfx_obj_set_pos(s_provider_badges.time_label, 6, (gfx_coord_t)(s_lcd_height - 18));
+    if (!s_provider_badges.time_text_cached || strcmp(s_provider_badges.time_text_cache, time_text) != 0) {
+        gfx_label_set_text(s_provider_badges.time_label, time_text);
+        strncpy(s_provider_badges.time_text_cache, time_text, sizeof(s_provider_badges.time_text_cache) - 1);
+        s_provider_badges.time_text_cache[sizeof(s_provider_badges.time_text_cache) - 1] = '\0';
+        s_provider_badges.time_text_cached = true;
+    }
+
+    gfx_obj_get_size(s_provider_badges.time_label, &w, &h);
+    x = (gfx_coord_t)((s_lcd_width - (int)w) / 2);
+    y = (gfx_coord_t)(s_lcd_height - (int)h - 4);
+    if (y < 0) {
+        y = 0;
+    }
+
+    gfx_obj_set_pos(s_provider_badges.time_label, x, y);
     gfx_label_set_color(s_provider_badges.time_label, GFX_COLOR_HEX(0xF2F2F2));
     gfx_label_set_bg_enable(s_provider_badges.time_label, false);
-    gfx_label_set_text(s_provider_badges.time_label, time_text);
     gfx_obj_set_visible(s_provider_badges.time_label, true);
 }
 
@@ -315,7 +338,10 @@ static void emote_update_provider_badges_locked(void)
 
     if (s_provider_badges.active_im_index >= 0 &&
             (now_ms - s_provider_badges.active_im_mark_ms) < 2500) {
-        bounce_y_ofs = ((now_ms / EMOTE_BADGE_ANIM_PERIOD_MS) % 2 == 0) ? -EMOTE_IM_BOUNCE_PIXELS : EMOTE_IM_BOUNCE_PIXELS;
+        int64_t elapsed_ms = now_ms - s_provider_badges.active_im_mark_ms;
+        if (elapsed_ms < EMOTE_IM_BOUNCE_PULSE_MS) {
+            bounce_y_ofs = -EMOTE_IM_BOUNCE_PIXELS;
+        }
     }
 
     if (s_provider_badges.center_logo) {
@@ -558,10 +584,26 @@ static void emote_badge_anim_task_entry(void *arg)
         }
 
         if (s_provider_badges.active_im_index >= 0) {
-            need_refresh = true;
-            if ((now_ms - s_provider_badges.active_im_mark_ms) >= EMOTE_BADGE_ACTIVE_MS) {
+            int64_t elapsed_ms = now_ms - s_provider_badges.active_im_mark_ms;
+            int new_phase = (elapsed_ms < EMOTE_IM_BOUNCE_PULSE_MS) ? 1 : 2;
+
+            if (elapsed_ms >= EMOTE_BADGE_ACTIVE_MS) {
                 s_provider_badges.active_im_index = -1;
+                new_phase = 0;
             }
+
+            if (new_phase != s_provider_badges.im_anim_phase) {
+                s_provider_badges.im_anim_phase = new_phase;
+                need_refresh = true;
+            }
+        } else if (s_provider_badges.im_anim_phase != 0) {
+            s_provider_badges.im_anim_phase = 0;
+            need_refresh = true;
+        }
+
+        // If still within active window and no phase change, avoid heavy redraws.
+        if (!need_refresh && s_provider_badges.active_im_index >= 0) {
+            continue;
         }
 
         if (need_refresh) {
@@ -777,6 +819,7 @@ esp_err_t emote_mark_active_im_platform(const char *platform)
 
     s_provider_badges.active_im_index = im_index;
     s_provider_badges.active_im_mark_ms = esp_timer_get_time() / 1000;
+    s_provider_badges.im_anim_phase = 0;
 
     if (!s_badge_anim_task) {
         if (xTaskCreate(emote_badge_anim_task_entry,
