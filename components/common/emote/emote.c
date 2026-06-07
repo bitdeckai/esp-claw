@@ -40,9 +40,9 @@ static const char *TAG = "app_emote";
 #define EMOTE_TIME_UPDATE_MS 1000
 #define EMOTE_IM_BOUNCE_STEP_MS 150
 #define EMOTE_IM_BOUNCE_STEPS 6
-#define EMOTE_TIME_LABEL_WIDTH 120
+#define EMOTE_TIME_LABEL_MIN_WIDTH 140
 #define EMOTE_DATE_LABEL_WIDTH 120
-#define EMOTE_TIME_LABEL_HEIGHT 30
+#define EMOTE_TIME_LABEL_HEIGHT 56
 #define EMOTE_DATE_LABEL_HEIGHT 14
 
 #define EMOTE_COLOR_DIM_HEX      0x7A7A7A
@@ -142,6 +142,7 @@ static emote_provider_badges_t s_provider_badges = {
 
 LV_FONT_DECLARE(font_maison_neue_book_12);
 LV_FONT_DECLARE(font_maison_neue_book_26);
+LV_FONT_DECLARE(font_puhui_basic_20_4);
 
 extern const void *emote_acquire_data(emote_handle_t handle, const void *data_ref, size_t size, void **output_ptr);
 
@@ -294,7 +295,6 @@ static bool emote_load_logo_to_dsc(const char *icon_name, gfx_image_dsc_t *out_d
 
 static void emote_update_time_label_locked(void)
 {
-    char datetime_text[32];
     char date_text[16] = "----/--/--";
     char clock_text[16] = "--:--:--";
     time_t now;
@@ -303,10 +303,11 @@ static void emote_update_time_label_locked(void)
     gfx_coord_t y_date;
     gfx_coord_t x_clock;
     gfx_coord_t y_clock;
-    const int bottom_pad = 3;
-    const int line_gap = 1;
+    const int bottom_pad = 4;
+    const int line_gap = 2;
+    int clock_w;
 
-    if (!s_provider_badges.date_label && !s_provider_badges.clock_label) {
+    if (!s_provider_badges.clock_label) {
         return;
     }
 
@@ -324,29 +325,30 @@ static void emote_update_time_label_locked(void)
         s_provider_badges.date_text_cached = true;
     }
 
-    if (s_provider_badges.clock_label) {
-        const char *clock_show_text = clock_text;
-        if (!s_provider_badges.date_label) {
-            snprintf(datetime_text, sizeof(datetime_text), "%s\n%s", date_text, clock_text);
-            clock_show_text = datetime_text;
-        }
+    if (!s_provider_badges.clock_text_cached || strcmp(s_provider_badges.clock_text_cache, clock_text) != 0) {
+        gfx_label_set_text(s_provider_badges.clock_label, clock_text);
+        strncpy(s_provider_badges.clock_text_cache, clock_text, sizeof(s_provider_badges.clock_text_cache) - 1);
+        s_provider_badges.clock_text_cache[sizeof(s_provider_badges.clock_text_cache) - 1] = '\0';
+        s_provider_badges.clock_text_cached = true;
+    }
 
-        if (!s_provider_badges.clock_text_cached || strcmp(s_provider_badges.clock_text_cache, clock_show_text) != 0) {
-            gfx_label_set_text(s_provider_badges.clock_label, clock_show_text);
-            strncpy(s_provider_badges.clock_text_cache, clock_show_text, sizeof(s_provider_badges.clock_text_cache) - 1);
-            s_provider_badges.clock_text_cache[sizeof(s_provider_badges.clock_text_cache) - 1] = '\0';
-            s_provider_badges.clock_text_cached = true;
-        }
+    clock_w = s_lcd_width - 12;
+    if (clock_w < EMOTE_TIME_LABEL_MIN_WIDTH) {
+        clock_w = EMOTE_TIME_LABEL_MIN_WIDTH;
+    }
+    if (clock_w > s_lcd_width) {
+        clock_w = s_lcd_width;
     }
 
     x_date = (gfx_coord_t)((s_lcd_width - EMOTE_DATE_LABEL_WIDTH) / 2);
-    x_clock = (gfx_coord_t)((s_lcd_width - EMOTE_TIME_LABEL_WIDTH) / 2);
+    x_clock = (gfx_coord_t)((s_lcd_width - clock_w) / 2);
     y_clock = (gfx_coord_t)(s_lcd_height - EMOTE_TIME_LABEL_HEIGHT - bottom_pad);
-    y_date = s_provider_badges.clock_label ?
-             (gfx_coord_t)(y_clock - EMOTE_DATE_LABEL_HEIGHT - line_gap) :
-             (gfx_coord_t)(s_lcd_height - EMOTE_DATE_LABEL_HEIGHT - bottom_pad);
+    y_date = (gfx_coord_t)(y_clock - EMOTE_DATE_LABEL_HEIGHT - line_gap);
     if (y_date < 0) {
         y_date = 0;
+    }
+    if (y_clock < 0) {
+        y_clock = 0;
     }
 
     if (s_provider_badges.date_label) {
@@ -360,17 +362,14 @@ static void emote_update_time_label_locked(void)
         gfx_obj_set_visible(s_provider_badges.date_label, true);
     }
 
-    if (s_provider_badges.clock_label) {
-        gfx_obj_set_pos(s_provider_badges.clock_label, x_clock, y_clock);
-        gfx_obj_set_size(s_provider_badges.clock_label,
-                         EMOTE_TIME_LABEL_WIDTH,
-                         s_provider_badges.date_label ? EMOTE_TIME_LABEL_HEIGHT : (EMOTE_TIME_LABEL_HEIGHT + EMOTE_DATE_LABEL_HEIGHT + 2));
-        gfx_label_set_text_align(s_provider_badges.clock_label, GFX_TEXT_ALIGN_CENTER);
-        gfx_label_set_long_mode(s_provider_badges.clock_label, s_provider_badges.date_label ? GFX_LABEL_LONG_CLIP : GFX_LABEL_LONG_WRAP);
-        gfx_label_set_color(s_provider_badges.clock_label, GFX_COLOR_HEX(0xF2F2F2));
-        gfx_label_set_bg_enable(s_provider_badges.clock_label, false);
-        gfx_obj_set_visible(s_provider_badges.clock_label, true);
-    }
+    gfx_obj_set_pos(s_provider_badges.clock_label, x_clock, y_clock);
+    gfx_obj_set_size(s_provider_badges.clock_label, (uint16_t)clock_w, EMOTE_TIME_LABEL_HEIGHT);
+    gfx_label_set_text_align(s_provider_badges.clock_label, GFX_TEXT_ALIGN_CENTER);
+    gfx_label_set_long_mode(s_provider_badges.clock_label, GFX_LABEL_LONG_CLIP);
+    gfx_label_set_color(s_provider_badges.clock_label, GFX_COLOR_HEX(0xF2F2F2));
+    gfx_label_set_opa(s_provider_badges.clock_label, 255);
+    gfx_label_set_bg_enable(s_provider_badges.clock_label, false);
+    gfx_obj_set_visible(s_provider_badges.clock_label, true);
 }
 
 static void emote_update_provider_badges_locked(void)
@@ -504,6 +503,7 @@ static void emote_create_provider_badges(void)
     int llm_y;
     int im_y;
     int i;
+    int clock_w;
 
     // `eye_anim` in layout is aligned to center with y=20, use the same occupied center line as anchor.
     center_y = (s_lcd_height / 2) + EMOTE_CENTER_OCCUPY_Y_OFFSET;
@@ -525,34 +525,6 @@ static void emote_create_provider_badges(void)
     s_provider_badges.center_logo = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_IMAGE, center_logo_obj_name);
     if (s_provider_badges.center_logo) {
         gfx_obj_set_visible(s_provider_badges.center_logo, false);
-    }
-
-    s_provider_badges.date_label = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_LABEL, date_label_obj_name);
-    s_provider_badges.clock_label = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_LABEL, clock_label_obj_name);
-    if (!s_provider_badges.date_label) {
-        ESP_LOGW(TAG, "create date label failed: %s", date_label_obj_name);
-    } else {
-        ESP_LOGI(TAG, "date label created: %s", date_label_obj_name);
-    }
-    if (!s_provider_badges.clock_label) {
-        ESP_LOGW(TAG, "create clock label failed: %s", clock_label_obj_name);
-    }
-    if (s_provider_badges.date_label) {
-        gfx_obj_set_size(s_provider_badges.date_label, EMOTE_DATE_LABEL_WIDTH, EMOTE_DATE_LABEL_HEIGHT);
-        gfx_label_set_text_align(s_provider_badges.date_label, GFX_TEXT_ALIGN_CENTER);
-        gfx_label_set_long_mode(s_provider_badges.date_label, GFX_LABEL_LONG_CLIP);
-        gfx_label_set_font(s_provider_badges.date_label, (void *)&font_maison_neue_book_12);
-        gfx_label_set_opa(s_provider_badges.date_label, 255);
-        gfx_label_set_bg_enable(s_provider_badges.date_label, false);
-        gfx_obj_set_visible(s_provider_badges.date_label, true);
-    }
-    if (s_provider_badges.clock_label) {
-        gfx_obj_set_size(s_provider_badges.clock_label, EMOTE_TIME_LABEL_WIDTH, EMOTE_TIME_LABEL_HEIGHT);
-        gfx_label_set_text_align(s_provider_badges.clock_label, GFX_TEXT_ALIGN_CENTER);
-        gfx_label_set_long_mode(s_provider_badges.clock_label, GFX_LABEL_LONG_CLIP);
-        gfx_label_set_font(s_provider_badges.clock_label, (void *)&font_maison_neue_book_26);
-        gfx_label_set_bg_enable(s_provider_badges.clock_label, false);
-        gfx_obj_set_visible(s_provider_badges.clock_label, true);
     }
 
     // Keep default eye/swim animation visible; provider rows are arranged around its occupied center area.
@@ -604,6 +576,45 @@ static void emote_create_provider_badges(void)
             gfx_obj_set_pos(icon_obj, x, (gfx_coord_t)im_y);
             gfx_obj_set_visible(icon_obj, false);
         }
+    }
+
+    // Create date/time labels at the end to keep them above badges.
+    s_provider_badges.date_label = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_LABEL, date_label_obj_name);
+    s_provider_badges.clock_label = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_LABEL, clock_label_obj_name);
+
+    if (!s_provider_badges.date_label) {
+        ESP_LOGW(TAG, "create date label failed: %s", date_label_obj_name);
+    }
+    if (!s_provider_badges.clock_label) {
+        ESP_LOGW(TAG, "create clock label failed: %s", clock_label_obj_name);
+    }
+
+    clock_w = s_lcd_width - 12;
+    if (clock_w < EMOTE_TIME_LABEL_MIN_WIDTH) {
+        clock_w = EMOTE_TIME_LABEL_MIN_WIDTH;
+    }
+    if (clock_w > s_lcd_width) {
+        clock_w = s_lcd_width;
+    }
+
+    if (s_provider_badges.date_label) {
+        gfx_obj_set_size(s_provider_badges.date_label, EMOTE_DATE_LABEL_WIDTH, EMOTE_DATE_LABEL_HEIGHT);
+        gfx_label_set_text_align(s_provider_badges.date_label, GFX_TEXT_ALIGN_CENTER);
+        gfx_label_set_long_mode(s_provider_badges.date_label, GFX_LABEL_LONG_CLIP);
+        gfx_label_set_font(s_provider_badges.date_label, (void *)&font_maison_neue_book_12);
+        gfx_label_set_opa(s_provider_badges.date_label, 255);
+        gfx_label_set_bg_enable(s_provider_badges.date_label, false);
+        gfx_obj_set_visible(s_provider_badges.date_label, true);
+    }
+
+    if (s_provider_badges.clock_label) {
+        gfx_obj_set_size(s_provider_badges.clock_label, (uint16_t)clock_w, EMOTE_TIME_LABEL_HEIGHT);
+        gfx_label_set_text_align(s_provider_badges.clock_label, GFX_TEXT_ALIGN_CENTER);
+        gfx_label_set_long_mode(s_provider_badges.clock_label, GFX_LABEL_LONG_CLIP);
+        gfx_label_set_font(s_provider_badges.clock_label, (void *)&font_maison_neue_book_26);
+        gfx_label_set_opa(s_provider_badges.clock_label, 255);
+        gfx_label_set_bg_enable(s_provider_badges.clock_label, false);
+        gfx_obj_set_visible(s_provider_badges.clock_label, true);
     }
 
     s_provider_badges.created = true;
