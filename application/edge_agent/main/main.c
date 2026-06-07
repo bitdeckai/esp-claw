@@ -22,6 +22,9 @@
 #include "cmd_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#if CONFIG_APP_CLAW_CAP_TIME
+#include "cap_time.h"
+#endif
 #if CONFIG_APP_CLAW_CAP_IM_WECHAT
 #include "cap_im_wechat.h"
 #endif
@@ -39,6 +42,69 @@ static app_claw_storage_paths_t *s_claw_paths;
 static const char *app_fatfs_base_path = "/fatfs";
 
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
+
+esp_err_t __attribute__((weak)) app_board_external_rtc_load_time(void)
+{
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t __attribute__((weak)) app_board_external_rtc_store_time(void)
+{
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+#if CONFIG_APP_CLAW_CAP_TIME
+static bool s_time_sync_task_running = false;
+
+static void main_sync_time_after_wifi_task(void *arg)
+{
+    (void)arg;
+
+    char output[128] = {0};
+    esp_err_t sync_err = cap_time_sync_now(output, sizeof(output));
+    if (sync_err == ESP_OK) {
+        esp_err_t rtc_err;
+        ESP_LOGI(TAG, "Time sync after Wi-Fi connect succeeded: %s", output);
+        rtc_err = app_board_external_rtc_store_time();
+        if (rtc_err != ESP_OK && rtc_err != ESP_ERR_NOT_SUPPORTED && rtc_err != ESP_ERR_NOT_FOUND) {
+            ESP_LOGW(TAG, "Failed to persist time to external RTC: %s", esp_err_to_name(rtc_err));
+        }
+    } else {
+        ESP_LOGW(TAG, "Time sync after Wi-Fi connect failed: %s", esp_err_to_name(sync_err));
+    }
+
+    wifi_manager_status_t status = {0};
+    wifi_manager_get_status(&status);
+    const char *ap_ssid = status.ap_active ? status.ap_ssid : NULL;
+    esp_err_t ui_err = app_claw_set_network_status(status.sta_connected, ap_ssid);
+    if (ui_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to refresh emote clock after sync: %s", esp_err_to_name(ui_err));
+    }
+
+    s_time_sync_task_running = false;
+    vTaskDelete(NULL);
+}
+
+static void main_try_schedule_time_sync_after_wifi(void)
+{
+    if (s_time_sync_task_running) {
+        return;
+    }
+
+    BaseType_t ok;
+    s_time_sync_task_running = true;
+    ok = xTaskCreate(main_sync_time_after_wifi_task,
+                     "time_sync_wifi",
+                     4096,
+                     NULL,
+                     4,
+                     NULL);
+    if (ok != pdPASS) {
+        s_time_sync_task_running = false;
+        ESP_LOGW(TAG, "Failed to create Wi-Fi time sync task");
+    }
+}
+#endif
 
 static esp_err_t app_allocate_runtime_state(void)
 {
@@ -89,6 +155,12 @@ static void on_wifi_state_changed(bool connected, void *user_ctx)
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to update network emote: %s", esp_err_to_name(err));
     }
+
+#if CONFIG_APP_CLAW_CAP_TIME
+    if (connected) {
+        main_try_schedule_time_sync_after_wifi();
+    }
+#endif
 }
 
 static esp_err_t app_claw_init_storage_paths(app_claw_storage_paths_t *paths)
@@ -335,6 +407,12 @@ void app_main(void)
     app_config_to_claw(s_config, s_claw_config);
     init_timezone(app_config_get_timezone(s_config)); // no need to check error
     ESP_ERROR_CHECK(esp_board_manager_init());
+    {
+        esp_err_t rtc_err = app_board_external_rtc_load_time();
+        if (rtc_err != ESP_OK && rtc_err != ESP_ERR_NOT_SUPPORTED && rtc_err != ESP_ERR_NOT_FOUND) {
+            ESP_LOGW(TAG, "Failed to restore time from external RTC: %s", esp_err_to_name(rtc_err));
+        }
+    }
     ESP_ERROR_CHECK(app_claw_ui_start());
     ESP_ERROR_CHECK(init_fatfs());
     ESP_ERROR_CHECK(wifi_manager_init());

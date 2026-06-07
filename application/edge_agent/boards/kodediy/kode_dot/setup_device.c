@@ -3,8 +3,11 @@
  */
 
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_board_manager.h"
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "freertos/FreeRTOS.h"
@@ -28,6 +31,17 @@ static const char *TAG = "KODE_DOT_SETUP_DEVICE";
 #define BQ25896_OTG_CONFIG_MASK    BIT(5)
 #define BQ25896_VBUS_STAT_MASK     0xE0
 
+#define KODE_DOT_MIN_VALID_EPOCH   1700000000
+
+#define RV3028_REG_SECONDS         0x00
+#define RV3028_REG_MINUTES         0x01
+#define RV3028_REG_HOURS           0x02
+#define RV3028_REG_WEEKDAY         0x03
+#define RV3028_REG_DATE            0x04
+#define RV3028_REG_MONTH           0x05
+#define RV3028_REG_YEAR            0x06
+#define RV3028_BURST_LEN           7
+
 typedef struct {
     i2c_master_bus_handle_t bus;
     i2c_master_dev_handle_t dev;
@@ -36,6 +50,191 @@ typedef struct {
     int8_t otg_enabled;
     bool stop_task;
 } kode_dot_pmic_handle_t;
+
+typedef struct {
+    i2c_master_dev_handle_t dev;
+    const char *peripheral_name;
+} kode_dot_external_rtc_io_t;
+
+static bool kode_dot_time_is_valid(time_t epoch)
+{
+    return epoch >= KODE_DOT_MIN_VALID_EPOCH;
+}
+
+static uint8_t kode_dot_bin_to_bcd(uint8_t value)
+{
+    return (uint8_t)(((value / 10U) << 4) | (value % 10U));
+}
+
+static uint8_t kode_dot_bcd_to_bin(uint8_t value)
+{
+    return (uint8_t)(((value >> 4) * 10U) + (value & 0x0FU));
+}
+
+static esp_err_t kode_dot_external_rtc_open(kode_dot_external_rtc_io_t *io)
+{
+    void *cfg_ptr = NULL;
+    const dev_custom_external_rtc_config_t *cfg = NULL;
+    i2c_master_bus_handle_t bus = NULL;
+    i2c_device_config_t dev_cfg = {0};
+    esp_err_t ret;
+
+    if (!io) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    memset(io, 0, sizeof(*io));
+
+    ret = esp_board_manager_get_device_config("external_rtc", &cfg_ptr);
+    if (ret != ESP_OK || !cfg_ptr) {
+        return ret != ESP_OK ? ret : ESP_ERR_NOT_FOUND;
+    }
+    cfg = (const dev_custom_external_rtc_config_t *)cfg_ptr;
+    if (!cfg->peripheral_name || cfg->peripheral_count == 0) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    ret = esp_board_periph_ref_handle(cfg->peripheral_name, (void **)&bus);
+    if (ret != ESP_OK || !bus) {
+        return ret != ESP_OK ? ret : ESP_FAIL;
+    }
+
+    dev_cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    dev_cfg.device_address = (uint16_t)((uint8_t)cfg->i2c_addr);
+    dev_cfg.scl_speed_hz = (cfg->frequency > 0) ? (uint32_t)cfg->frequency : 400000U;
+
+    ret = i2c_master_bus_add_device(bus, &dev_cfg, &io->dev);
+    if (ret != ESP_OK) {
+        esp_board_periph_unref_handle(cfg->peripheral_name);
+        return ret;
+    }
+
+    io->peripheral_name = cfg->peripheral_name;
+    return ESP_OK;
+}
+
+static void kode_dot_external_rtc_close(kode_dot_external_rtc_io_t *io)
+{
+    if (!io) {
+        return;
+    }
+
+    if (io->dev) {
+        i2c_master_bus_rm_device(io->dev);
+        io->dev = NULL;
+    }
+    if (io->peripheral_name) {
+        esp_board_periph_unref_handle(io->peripheral_name);
+        io->peripheral_name = NULL;
+    }
+}
+
+static esp_err_t kode_dot_external_rtc_read_epoch(time_t *out_epoch)
+{
+    kode_dot_external_rtc_io_t io = {0};
+    uint8_t reg = RV3028_REG_SECONDS;
+    uint8_t data[RV3028_BURST_LEN] = {0};
+    struct tm tm_local = {0};
+    esp_err_t ret;
+
+    if (!out_epoch) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ret = kode_dot_external_rtc_open(&io);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    ret = i2c_master_transmit_receive(io.dev, &reg, 1, data, sizeof(data), pdMS_TO_TICKS(100));
+    if (ret != ESP_OK) {
+        kode_dot_external_rtc_close(&io);
+        return ret;
+    }
+
+    tm_local.tm_sec = (int)kode_dot_bcd_to_bin(data[RV3028_REG_SECONDS] & 0x7F);
+    tm_local.tm_min = (int)kode_dot_bcd_to_bin(data[RV3028_REG_MINUTES] & 0x7F);
+    tm_local.tm_hour = (int)kode_dot_bcd_to_bin(data[RV3028_REG_HOURS] & 0x3F);
+    tm_local.tm_mday = (int)kode_dot_bcd_to_bin(data[RV3028_REG_DATE] & 0x3F);
+    tm_local.tm_mon = (int)kode_dot_bcd_to_bin(data[RV3028_REG_MONTH] & 0x1F) - 1;
+    tm_local.tm_year = (int)kode_dot_bcd_to_bin(data[RV3028_REG_YEAR]) + 100;
+    tm_local.tm_isdst = -1;
+
+    *out_epoch = mktime(&tm_local);
+    kode_dot_external_rtc_close(&io);
+    return (*out_epoch >= 0) ? ESP_OK : ESP_ERR_INVALID_RESPONSE;
+}
+
+static esp_err_t kode_dot_external_rtc_write_epoch(time_t epoch)
+{
+    kode_dot_external_rtc_io_t io = {0};
+    struct tm tm_local = {0};
+    uint8_t payload[1 + RV3028_BURST_LEN] = {0};
+    uint8_t weekday;
+    esp_err_t ret;
+
+    if (localtime_r(&epoch, &tm_local) == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ret = kode_dot_external_rtc_open(&io);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    weekday = (tm_local.tm_wday == 0) ? 7U : (uint8_t)tm_local.tm_wday;
+    payload[0] = RV3028_REG_SECONDS;
+    payload[1] = kode_dot_bin_to_bcd((uint8_t)tm_local.tm_sec);
+    payload[2] = kode_dot_bin_to_bcd((uint8_t)tm_local.tm_min);
+    payload[3] = kode_dot_bin_to_bcd((uint8_t)tm_local.tm_hour);
+    payload[4] = kode_dot_bin_to_bcd(weekday);
+    payload[5] = kode_dot_bin_to_bcd((uint8_t)tm_local.tm_mday);
+    payload[6] = kode_dot_bin_to_bcd((uint8_t)(tm_local.tm_mon + 1));
+    payload[7] = kode_dot_bin_to_bcd((uint8_t)((tm_local.tm_year + 1900) % 100));
+
+    ret = i2c_master_transmit(io.dev, payload, sizeof(payload), pdMS_TO_TICKS(100));
+    kode_dot_external_rtc_close(&io);
+    return ret;
+}
+
+esp_err_t app_board_external_rtc_load_time(void)
+{
+    time_t now = time(NULL);
+    time_t rtc_epoch = 0;
+    struct timeval tv = {0};
+    esp_err_t ret;
+
+    if (kode_dot_time_is_valid(now)) {
+        return ESP_OK;
+    }
+
+    ret = kode_dot_external_rtc_read_epoch(&rtc_epoch);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    if (!kode_dot_time_is_valid(rtc_epoch)) {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    tv.tv_sec = rtc_epoch;
+    tv.tv_usec = 0;
+    if (settimeofday(&tv, NULL) != 0) {
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "System time restored from RV-3028");
+    return ESP_OK;
+}
+
+esp_err_t app_board_external_rtc_store_time(void)
+{
+    time_t now = time(NULL);
+
+    if (!kode_dot_time_is_valid(now)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    return kode_dot_external_rtc_write_epoch(now);
+}
 
 static esp_err_t bq25896_read_reg(i2c_master_dev_handle_t dev, uint8_t reg, uint8_t *value)
 {

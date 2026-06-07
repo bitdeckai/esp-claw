@@ -6,7 +6,9 @@
 
 #include "emote.h"
 
+#include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "esp_check.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
@@ -20,6 +22,7 @@
 static const char *TAG = "app_emote";
 
 #define EMOTE_ASSETS_PARTITION "emote"
+#define EMOTE_MIN_VALID_EPOCH 1700000000
 
 static esp_lcd_panel_io_handle_t s_io_handle;
 static esp_lcd_panel_handle_t s_panel_handle;
@@ -171,6 +174,30 @@ static esp_err_t emote_apply(const char *idle, const char *msg)
     return ESP_OK;
 }
 
+static void emote_append_time_suffix(char *msg, size_t msg_size)
+{
+    time_t now;
+    struct tm local_tm = {0};
+    char time_text[16] = "--:--:--";
+    size_t len;
+
+    if (!msg || msg_size == 0) {
+        return;
+    }
+
+    now = time(NULL);
+    if (now >= EMOTE_MIN_VALID_EPOCH && localtime_r(&now, &local_tm) != NULL) {
+        strftime(time_text, sizeof(time_text), "%H:%M:%S", &local_tm);
+    }
+
+    len = strlen(msg);
+    if (len >= msg_size - 1) {
+        return;
+    }
+
+    snprintf(msg + len, msg_size - len, " | %s", time_text);
+}
+
 esp_err_t emote_set_network_status(bool sta_connected, const char *ap_ssid)
 {
     ESP_RETURN_ON_FALSE(s_emote_handle != NULL, ESP_ERR_INVALID_STATE, TAG, "emote handle is NULL");
@@ -178,7 +205,7 @@ esp_err_t emote_set_network_status(bool sta_connected, const char *ap_ssid)
     const bool ap_present = (ap_ssid != NULL && ap_ssid[0] != '\0');
     const char *idle = sta_connected ? "swim" : "offline";
 
-    char msg[96];
+    char msg[112];
     if (sta_connected && ap_present) {
         snprintf(msg, sizeof(msg), "Online * AP: %s", ap_ssid);
     } else if (sta_connected) {
@@ -188,6 +215,8 @@ esp_err_t emote_set_network_status(bool sta_connected, const char *ap_ssid)
     } else {
         snprintf(msg, sizeof(msg), "Wi-Fi offline");
     }
+
+    emote_append_time_suffix(msg, sizeof(msg));
 
     return emote_apply(idle, msg);
 }

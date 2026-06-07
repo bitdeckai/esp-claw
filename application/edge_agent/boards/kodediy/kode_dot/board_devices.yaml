@@ -2,9 +2,9 @@
 version: 1.0.0
 devices:
 
-  # TCA95xx 16-bit IO expander (7-bit addr 0x20, 8-bit value 0x40)
+  # TCA95xx 16-bit IO expander (TCA9535RTWR, 7-bit addr 0x20, 8-bit value 0x40)
   - name: gpio_expander
-    chip: tca9555
+    chip: tca9535
     type: gpio_expander
     version: default
     dependencies:
@@ -161,12 +161,12 @@ devices:
       - name: i2c_master
 
   - name: external_rtc
-    chip: max31329
+    chip: rv3028
     type: custom
     version: default
     init_skip: true
     config:
-      i2c_addr: 0x68
+      i2c_addr: 0x52
       frequency: 400000
     peripherals:
       - name: i2c_master
@@ -193,7 +193,7 @@ devices:
     peripherals:
       - name: i2c_master
 
-  # Six gamepad-style buttons: GPIO0 plus five keys on the TCA9555 expander.
+  # Six gamepad-style buttons: GPIO0 plus five keys on the TCA9535 expander.
   - name: button_up
     type: button
     sub_type: gpio
