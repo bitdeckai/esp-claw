@@ -185,6 +185,7 @@ esp_err_t app_claw_start(const app_claw_config_t *config,
 {
     claw_core_config_t core_config = {0};
     esp_err_t mem_err = ESP_OK;
+    esp_err_t skill_err = ESP_OK;
     claw_event_router_config_t router_config = {
         .rules_path = NULL,
         .task_stack_size = 8 * 1024,
@@ -201,6 +202,7 @@ esp_err_t app_claw_start(const app_claw_config_t *config,
     };
     bool llm_enabled = false;
     bool memory_ready = false;
+    bool skills_ready = false;
 
     if (!config || !paths) {
         return ESP_ERR_INVALID_ARG;
@@ -235,7 +237,13 @@ esp_err_t app_claw_start(const app_claw_config_t *config,
         ESP_LOGW(TAG, "Memory init failed (%s). Continue without memory features.",
                  esp_err_to_name(mem_err));
     }
-    ESP_RETURN_ON_ERROR(init_skills(paths), TAG, "Failed to init skills");
+    skill_err = init_skills(paths);
+    if (skill_err == ESP_OK) {
+        skills_ready = true;
+    } else {
+        ESP_LOGW(TAG, "Skills init failed (%s). Continue without skill features.",
+                 esp_err_to_name(skill_err));
+    }
     ESP_RETURN_ON_ERROR(app_capabilities_init(config, paths), TAG, "Failed to init capabilities");
 #if CONFIG_APP_CLAW_CAP_IM_QQ
     ESP_RETURN_ON_ERROR(claw_event_router_register_outbound_binding("qq", "qq_send_message"),
@@ -303,6 +311,9 @@ esp_err_t app_claw_start(const app_claw_config_t *config,
         if (!memory_ready) {
             ESP_LOGW(TAG, "claw_core will run without memory context providers");
         }
+        if (!skills_ready) {
+            ESP_LOGW(TAG, "claw_core will run without skill context providers");
+        }
         ESP_RETURN_ON_ERROR(claw_core_init(&core_config), TAG, "Failed to init claw_core");
         if (memory_ready) {
             ESP_RETURN_ON_ERROR(claw_core_add_context_provider(&claw_memory_profile_provider),
@@ -319,10 +330,12 @@ esp_err_t app_claw_start(const app_claw_config_t *config,
             ESP_RETURN_ON_ERROR(claw_core_add_context_provider(&claw_memory_session_history_provider),
                                 TAG, "Failed to add session history provider");
         }
-        ESP_RETURN_ON_ERROR(claw_core_add_context_provider(&claw_skill_skills_list_provider),
-                            TAG, "Failed to add skills list provider");
-        ESP_RETURN_ON_ERROR(claw_core_add_context_provider(&claw_skill_active_skill_docs_provider),
-                            TAG, "Failed to add active skill docs provider");
+        if (skills_ready) {
+            ESP_RETURN_ON_ERROR(claw_core_add_context_provider(&claw_skill_skills_list_provider),
+                                TAG, "Failed to add skills list provider");
+            ESP_RETURN_ON_ERROR(claw_core_add_context_provider(&claw_skill_active_skill_docs_provider),
+                                TAG, "Failed to add active skill docs provider");
+        }
         ESP_RETURN_ON_ERROR(claw_core_add_context_provider(&claw_cap_tools_provider),
                             TAG, "Failed to add cap tools provider");
 #if CONFIG_APP_CLAW_CAP_LUA
