@@ -38,7 +38,8 @@ static const char *TAG = "wifi_manager";
 #define CONFIG_APP_WIFI_MAX_RETRY 5
 #endif
 #ifndef CONFIG_APP_WIFI_MAX_TX_POWER_QDBM
-#define CONFIG_APP_WIFI_MAX_TX_POWER_QDBM 60
+// Keep a conservative fallback to reduce peak current on marginal USB power.
+#define CONFIG_APP_WIFI_MAX_TX_POWER_QDBM 44
 #endif
 
 typedef enum {

@@ -197,3 +197,56 @@ If this project helps you, please consider giving it a star. ⭐⭐⭐⭐⭐
 Inspired by [OpenClaw](https://github.com/openclaw/openclaw).
 
 The implementation of Agent Loop, IM communication, and related capabilities on ESP32 also draws on [MimiClaw](https://github.com/memovai/mimiclaw).
+
+## Windows Local Flash Quick Recipe
+
+If you are building and flashing on Windows with ESP-IDF 5.5.x, the following workflow avoids common mixed-version environment issues.
+
+1. Open **ESP-IDF 5.5 CMD** and run:
+
+```bat
+cd /d H:\esp32_v5.54\Espressif\frameworks\esp-idf-v5.5.4
+set IDF_TOOLS_PATH=H:\esp32_v5.54\Espressif
+set IDF_PYTHON_ENV_PATH=
+install.bat esp32,esp32s3
+export.bat
+idf.py --version
+```
+
+2. Build and flash this project:
+
+```bat
+cd /d E:\0_project\Kode\kodeclaw\esp-claw\application\edge_agent
+pip install esp-bmgr-assist
+idf.py gen-bmgr-config -c .\boards -b <board_name>
+idf.py fullclean
+idf.py build
+idf.py -p COMx flash monitor
+```
+
+3. List available boards and serial ports if needed:
+
+```bat
+idf.py gen-bmgr-config -c .\boards -l
+wmic path Win32_SerialPort get DeviceID,Name
+```
+
+### Troubleshooting (Windows)
+
+- Symptom: `export.bat` picks Git from another ESP-IDF installation (for example `v5.2.x`).
+  - Fix:
+
+```bat
+setx IDF_TOOLS_PATH "H:\esp32_v5.54\Espressif"
+cmd /c "set IDF_TOOLS_PATH=H:\esp32_v5.54\Espressif&& idf-env config set -g H:/esp32_v5.54/Espressif/tools/idf-git/2.44.0/cmd/git.exe"
+```
+
+- Symptom: dependency check fails with `Requirement 'esptool~=4.12.dev2' was not met`.
+  - Fix:
+
+```bat
+H:\esp32_v5.54\Espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe -m pip install --upgrade esptool~=4.12.dev2
+```
+
+- Symptom: switching between ESP-IDF versions causes unexpected build behavior.
+  - Fix: run `idf.py fullclean` before rebuilding.

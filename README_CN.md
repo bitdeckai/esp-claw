@@ -195,3 +195,56 @@ ESP-Claw 目前仍处于活跃开发阶段，欢迎向我们提交 Issue 反馈�
 灵感来自 [OpenClaw](https://github.com/openclaw/openclaw)。
 
 Agent Loop 和 IM 通讯等功能在 ESP32 上的实现参考了 [MimiClaw](https://github.com/memovai/mimiclaw)。
+
+## Windows 本地烧录快速指南
+
+如果你在 Windows 上使用 ESP-IDF 5.5.x 进行本地编译和烧录，下面这套流程可以规避常见的多版本环境混用问题。
+
+1. 打开 **ESP-IDF 5.5 CMD**，执行：
+
+```bat
+cd /d H:\esp32_v5.54\Espressif\frameworks\esp-idf-v5.5.4
+set IDF_TOOLS_PATH=H:\esp32_v5.54\Espressif
+set IDF_PYTHON_ENV_PATH=
+install.bat esp32,esp32s3
+export.bat
+idf.py --version
+```
+
+2. 编译并烧录当前项目：
+
+```bat
+cd /d E:\0_project\Kode\kodeclaw\esp-claw\application\edge_agent
+pip install esp-bmgr-assist
+idf.py gen-bmgr-config -c .\boards -b <board_name>
+idf.py fullclean
+idf.py build
+idf.py -p COMx flash monitor
+```
+
+3. 如需查询支持板卡和串口：
+
+```bat
+idf.py gen-bmgr-config -c .\boards -l
+wmic path Win32_SerialPort get DeviceID,Name
+```
+
+### 常见问题排查（Windows）
+
+- 现象：`export.bat` 使用了其他 ESP-IDF 安装目录的 Git（例如 `v5.2.x`）。
+  - 处理：
+
+```bat
+setx IDF_TOOLS_PATH "H:\esp32_v5.54\Espressif"
+cmd /c "set IDF_TOOLS_PATH=H:\esp32_v5.54\Espressif&& idf-env config set -g H:/esp32_v5.54/Espressif/tools/idf-git/2.44.0/cmd/git.exe"
+```
+
+- 现象：依赖检查提示 `Requirement 'esptool~=4.12.dev2' was not met`。
+  - 处理：
+
+```bat
+H:\esp32_v5.54\Espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe -m pip install --upgrade esptool~=4.12.dev2
+```
+
+- 现象：在 ESP-IDF 不同版本之间切换后，构建行为异常。
+  - 处理：构建前先执行 `idf.py fullclean`。
