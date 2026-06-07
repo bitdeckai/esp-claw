@@ -90,7 +90,7 @@ typedef struct {
     int im_anim_phase;
     char date_text_cache[16];
     bool date_text_cached;
-    char clock_text_cache[16];
+    char clock_text_cache[32];
     bool clock_text_cached;
     gfx_coord_t llm_base_x[EMOTE_LLM_COUNT];
     gfx_coord_t llm_base_y[EMOTE_LLM_COUNT];
@@ -294,6 +294,7 @@ static bool emote_load_logo_to_dsc(const char *icon_name, gfx_image_dsc_t *out_d
 
 static void emote_update_time_label_locked(void)
 {
+    char datetime_text[32];
     char date_text[16] = "----/--/--";
     char clock_text[16] = "--:--:--";
     time_t now;
@@ -323,12 +324,19 @@ static void emote_update_time_label_locked(void)
         s_provider_badges.date_text_cached = true;
     }
 
-    if (s_provider_badges.clock_label &&
-            (!s_provider_badges.clock_text_cached || strcmp(s_provider_badges.clock_text_cache, clock_text) != 0)) {
-        gfx_label_set_text(s_provider_badges.clock_label, clock_text);
-        strncpy(s_provider_badges.clock_text_cache, clock_text, sizeof(s_provider_badges.clock_text_cache) - 1);
-        s_provider_badges.clock_text_cache[sizeof(s_provider_badges.clock_text_cache) - 1] = '\0';
-        s_provider_badges.clock_text_cached = true;
+    if (s_provider_badges.clock_label) {
+        const char *clock_show_text = clock_text;
+        if (!s_provider_badges.date_label) {
+            snprintf(datetime_text, sizeof(datetime_text), "%s\n%s", date_text, clock_text);
+            clock_show_text = datetime_text;
+        }
+
+        if (!s_provider_badges.clock_text_cached || strcmp(s_provider_badges.clock_text_cache, clock_show_text) != 0) {
+            gfx_label_set_text(s_provider_badges.clock_label, clock_show_text);
+            strncpy(s_provider_badges.clock_text_cache, clock_show_text, sizeof(s_provider_badges.clock_text_cache) - 1);
+            s_provider_badges.clock_text_cache[sizeof(s_provider_badges.clock_text_cache) - 1] = '\0';
+            s_provider_badges.clock_text_cached = true;
+        }
     }
 
     x_date = (gfx_coord_t)((s_lcd_width - EMOTE_DATE_LABEL_WIDTH) / 2);
@@ -347,15 +355,18 @@ static void emote_update_time_label_locked(void)
         gfx_label_set_text_align(s_provider_badges.date_label, GFX_TEXT_ALIGN_CENTER);
         gfx_label_set_long_mode(s_provider_badges.date_label, GFX_LABEL_LONG_CLIP);
         gfx_label_set_color(s_provider_badges.date_label, GFX_COLOR_HEX(0xF2F2F2));
+        gfx_label_set_opa(s_provider_badges.date_label, 255);
         gfx_label_set_bg_enable(s_provider_badges.date_label, false);
         gfx_obj_set_visible(s_provider_badges.date_label, true);
     }
 
     if (s_provider_badges.clock_label) {
         gfx_obj_set_pos(s_provider_badges.clock_label, x_clock, y_clock);
-        gfx_obj_set_size(s_provider_badges.clock_label, EMOTE_TIME_LABEL_WIDTH, EMOTE_TIME_LABEL_HEIGHT);
+        gfx_obj_set_size(s_provider_badges.clock_label,
+                         EMOTE_TIME_LABEL_WIDTH,
+                         s_provider_badges.date_label ? EMOTE_TIME_LABEL_HEIGHT : (EMOTE_TIME_LABEL_HEIGHT + EMOTE_DATE_LABEL_HEIGHT + 2));
         gfx_label_set_text_align(s_provider_badges.clock_label, GFX_TEXT_ALIGN_CENTER);
-        gfx_label_set_long_mode(s_provider_badges.clock_label, GFX_LABEL_LONG_CLIP);
+        gfx_label_set_long_mode(s_provider_badges.clock_label, s_provider_badges.date_label ? GFX_LABEL_LONG_CLIP : GFX_LABEL_LONG_WRAP);
         gfx_label_set_color(s_provider_badges.clock_label, GFX_COLOR_HEX(0xF2F2F2));
         gfx_label_set_bg_enable(s_provider_badges.clock_label, false);
         gfx_obj_set_visible(s_provider_badges.clock_label, true);
@@ -482,7 +493,7 @@ static void emote_create_provider_badges(void)
         "im_wechat_logo", "im_qq_logo", "im_feishu_logo", "im_telegram_logo"
     };
     static const char *center_logo_obj_name = "center_claw_logo";
-    static const char *date_label_obj_name = "bottom_date_label";
+    static const char *date_label_obj_name = "bottom_date_label_custom";
     static const char *clock_label_obj_name = "bottom_clock_label";
     static const char *im_texts[EMOTE_IM_COUNT] = {
         "WX", "QQ", "FS", "TG"
@@ -520,6 +531,8 @@ static void emote_create_provider_badges(void)
     s_provider_badges.clock_label = emote_create_obj_by_type(s_emote_handle, EMOTE_OBJ_TYPE_LABEL, clock_label_obj_name);
     if (!s_provider_badges.date_label) {
         ESP_LOGW(TAG, "create date label failed: %s", date_label_obj_name);
+    } else {
+        ESP_LOGI(TAG, "date label created: %s", date_label_obj_name);
     }
     if (!s_provider_badges.clock_label) {
         ESP_LOGW(TAG, "create clock label failed: %s", clock_label_obj_name);
@@ -529,6 +542,7 @@ static void emote_create_provider_badges(void)
         gfx_label_set_text_align(s_provider_badges.date_label, GFX_TEXT_ALIGN_CENTER);
         gfx_label_set_long_mode(s_provider_badges.date_label, GFX_LABEL_LONG_CLIP);
         gfx_label_set_font(s_provider_badges.date_label, (void *)&font_maison_neue_book_12);
+        gfx_label_set_opa(s_provider_badges.date_label, 255);
         gfx_label_set_bg_enable(s_provider_badges.date_label, false);
         gfx_obj_set_visible(s_provider_badges.date_label, true);
     }
