@@ -32,6 +32,15 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
+extern esp_err_t emote_mark_active_im_platform(const char *platform) __attribute__((weak));
+
+static void cap_im_feishu_touch_emote_inbound(void)
+{
+    if (emote_mark_active_im_platform) {
+        emote_mark_active_im_platform("feishu");
+    }
+}
+
 #define CAP_IM_FEISHU_API_BASE "https://open.feishu.cn/open-apis"
 #define CAP_IM_FEISHU_AUTH_URL CAP_IM_FEISHU_API_BASE "/auth/v3/tenant_access_token/internal"
 #define CAP_IM_FEISHU_SEND_MSG_URL CAP_IM_FEISHU_API_BASE "/im/v1/messages"
@@ -950,6 +959,8 @@ static esp_err_t cap_im_feishu_publish_inbound_text(const char *chat_id,
     if (!content || !content[0]) {
         return ESP_OK;
     }
+
+    cap_im_feishu_touch_emote_inbound();
 
     return claw_event_router_publish_message("feishu_gateway",
                                              "feishu",

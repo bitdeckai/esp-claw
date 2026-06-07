@@ -212,6 +212,19 @@ esp_err_t app_claw_start(const app_claw_config_t *config,
     router_config.default_route_messages_to_agent = llm_enabled;
     router_config.rules_path = paths->router_rules_path;
 
+#if defined(CONFIG_APP_CLAW_ENABLE_EMOTE)
+    emote_set_provider_status(config->llm_backend_type,
+                              config->llm_base_url,
+                              config->llm_model,
+                              config->llm_api_key,
+                              config->qq_app_id,
+                              config->qq_app_secret,
+                              config->feishu_app_id,
+                              config->feishu_app_secret,
+                              config->tg_bot_token,
+                              config->wechat_token);
+#endif
+
 #if CONFIG_APP_CLAW_CAP_SESSION_MGR
     ESP_RETURN_ON_ERROR(cap_session_mgr_set_session_root_dir(paths->memory_session_root),
                         TAG, "Failed to configure session manager");

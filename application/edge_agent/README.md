@@ -88,3 +88,62 @@ idf.py menuconfig
 idf.py build
 idf.py flash monitor
 ```
+
+## Frontend Rebuild (Web UI)
+
+Rebuild the frontend only when files under `application/edge_agent/components/http_server/frontend_source` change.
+
+```bash
+cd application/edge_agent/components/http_server/frontend_source
+pnpm build
+```
+
+Notes:
+
+- Use `pnpm` (not `pnmp`).
+- If Vite warns about Node version, upgrade to a compatible version when possible.
+
+## Screen Logo Rebuild (Emote Assets)
+
+When changing platform logos for on-device screen rendering, regenerate emote icon binaries first:
+
+```bash
+cd components/common/emote/assets_local/emoji_large
+python convert_platform_logos.py
+```
+
+Then rebuild and flash firmware from `application/edge_agent`:
+
+```bash
+cd application/edge_agent
+idf.py build
+idf.py flash monitor
+```
+
+### If `idf.py fullclean` fails on managed components
+
+If `fullclean` reports modified `managed_components` hash mismatches, do not run `fullclean` for this case. Remove the build folder and rebuild:
+
+```bash
+cd application/edge_agent
+rm -rf build
+idf.py build
+idf.py flash monitor
+```
+
+On Windows CMD:
+
+```bat
+cd /d E:\0_project\Kode\kodeclaw\esp-claw\application\edge_agent
+rmdir /s /q build
+idf.py build
+idf.py flash monitor
+```
+
+### Log Checklist (Logo Validation)
+
+Use startup logs to quickly verify logo assets are loaded:
+
+- `Expression_load: Found ... icon items` should be much larger than `1`.
+- No repeated `Asset file not found: ...` for logo asset names.
+- No `Guru Meditation` crash in `emote_load_logo_to_dsc`.

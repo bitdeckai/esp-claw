@@ -168,6 +168,37 @@ ESP-Claw 目前已适配基于 ESP32-S3 的多款开发版，例如面包板、M
 
 **IM**: ESP-Claw 支持 Telegram、QQ、飞书、微信四大聊天软件，并可扩展。
 
+### 屏幕平台 Logo（LLM/IM）
+
+如果你在设备屏幕上展示 LLM/IM 平台 Logo（灰色=未配置，彩色=已配置，IM 入站平台轻微弹跳），请按下面流程操作：
+
+1. 准备源图片
+- 源目录：`application/edge_agent/fatfs_image/static`
+- 当前使用文件：OpenAI、阿里云百炼、DeepSeek、Anthropic、WeChat、QQ、Feishu、Telegram
+
+2. 生成屏幕资源（bin）
+- 脚本：`components/common/emote/assets_local/emoji_large/convert_platform_logos.py`
+- 在仓库根目录执行：
+
+  `python components/common/emote/assets_local/emoji_large/convert_platform_logos.py`
+
+3. 重新编译并烧录固件
+- 建议直接删 build 目录，不要使用 `idf.py fullclean`（如果你改过 managed_components，fullclean 可能触发哈希检查失败）
+
+  `cd /d application/edge_agent`
+
+  `rmdir /s /q build`
+
+  `idf.py build flash monitor`
+
+4. 排查要点
+- 启动日志应出现：`Expression_load: Found ... icon items`（数量应明显大于 1）
+- 不应再出现：`Asset file not found: l_oa_g.bin`、`i_wc_g.bin` 等
+- 如果仍显示英文缩写，通常是资源未重打包进 emote 分区
+
+5. 调整图标大小
+- 修改 `convert_platform_logos.py` 中的 `ICON_SIZE` 后，重新执行第 2、3 步
+
 ## 🔧开发计划
 
 ESP-Claw 目前仍处于活跃开发阶段，欢迎向我们提交 Issue 反馈问题或提交 Feature 请求。也可以通过[在线问卷](https://fcn5wbhnyubf.feishu.cn/share/base/form/shrcndYcjbGFY1ymttTSyYoGIPh)告诉我们你的想法。

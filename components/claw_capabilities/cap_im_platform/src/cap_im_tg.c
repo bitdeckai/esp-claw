@@ -28,6 +28,15 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
+extern esp_err_t emote_mark_active_im_platform(const char *platform) __attribute__((weak));
+
+static void cap_im_tg_touch_emote_inbound(void)
+{
+    if (emote_mark_active_im_platform) {
+        emote_mark_active_im_platform("telegram");
+    }
+}
+
 static const char *TAG = "cap_im_tg";
 
 #define CAP_IM_TG_API_BASE            "https://api.telegram.org"
@@ -243,6 +252,8 @@ static esp_err_t cap_im_tg_publish_inbound_text(const char *chat_id,
     if (!content || !content[0]) {
         return ESP_OK;
     }
+
+    cap_im_tg_touch_emote_inbound();
 
     return claw_event_router_publish_message("tg_gateway",
                                              "telegram",

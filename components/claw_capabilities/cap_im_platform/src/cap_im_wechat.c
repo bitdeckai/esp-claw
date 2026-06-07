@@ -34,6 +34,15 @@
 #include "mbedtls/base64.h"
 #include "mbedtls/md5.h"
 
+extern esp_err_t emote_mark_active_im_platform(const char *platform) __attribute__((weak));
+
+static void cap_im_wechat_touch_emote_inbound(void)
+{
+    if (emote_mark_active_im_platform) {
+        emote_mark_active_im_platform("wechat");
+    }
+}
+
 static const char *TAG = "cap_im_wechat";
 
 #define CAP_IM_WECHAT_HTTP_RESP_INIT 2048
@@ -720,6 +729,8 @@ static esp_err_t cap_im_wechat_publish_inbound_text(const char *chat_id,
     if (!content || !content[0]) {
         return ESP_OK;
     }
+
+    cap_im_wechat_touch_emote_inbound();
 
     ESP_LOGI(TAG,
              "wechat inbound text chat=%s sender=%s message_id=%s len=%u",
