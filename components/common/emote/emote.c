@@ -640,7 +640,8 @@ static void emote_badge_anim_task_entry(void *arg)
     (void)arg;
 
     while (true) {
-        bool need_refresh = false;
+        bool need_time_refresh = false;
+        bool need_badge_refresh = false;
         int64_t now_ms;
 
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(EMOTE_BADGE_ANIM_PERIOD_MS));
@@ -651,7 +652,7 @@ static void emote_badge_anim_task_entry(void *arg)
 
         now_ms = esp_timer_get_time() / 1000;
         if ((now_ms - last_time_update_ms) >= EMOTE_TIME_UPDATE_MS) {
-            need_refresh = true;
+            need_time_refresh = true;
             last_time_update_ms = now_ms;
         }
 
@@ -673,21 +674,25 @@ static void emote_badge_anim_task_entry(void *arg)
 
             if (new_phase != s_provider_badges.im_anim_phase) {
                 s_provider_badges.im_anim_phase = new_phase;
-                need_refresh = true;
+                need_badge_refresh = true;
             }
         } else if (s_provider_badges.im_anim_phase != 0) {
             s_provider_badges.im_anim_phase = 0;
-            need_refresh = true;
+            need_badge_refresh = true;
         }
 
         // If still within active window and no phase change, avoid heavy redraws.
-        if (!need_refresh && s_provider_badges.active_im_index >= 0) {
+        if (!need_time_refresh && !need_badge_refresh && s_provider_badges.active_im_index >= 0) {
             continue;
         }
 
-        if (need_refresh) {
+        if (need_time_refresh || need_badge_refresh) {
             emote_lock(s_emote_handle);
-            emote_update_provider_badges_locked();
+            if (need_badge_refresh) {
+                emote_update_provider_badges_locked();
+            } else {
+                emote_update_time_label_locked();
+            }
             emote_unlock(s_emote_handle);
 
             if (display_arbiter_is_owner(DISPLAY_ARBITER_OWNER_EMOTE)) {

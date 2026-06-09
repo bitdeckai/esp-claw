@@ -49,6 +49,7 @@ static const char *TAG = "cap_im_wechat";
 #define CAP_IM_WECHAT_MAX_MSG_LEN 4000
 #define CAP_IM_WECHAT_POLL_TIMEOUT_MS 35000
 #define CAP_IM_WECHAT_RETRY_DELAY_MS 2000
+#define CAP_IM_WECHAT_UNCONFIGURED_LOG_INTERVAL_MS 30000
 #define CAP_IM_WECHAT_DEDUP_CACHE_SIZE 64
 #define CAP_IM_WECHAT_CONTEXT_CACHE_SIZE 32
 #define CAP_IM_WECHAT_STAGE_CACHE_SIZE 32
@@ -1609,20 +1610,41 @@ static esp_err_t cap_im_wechat_poll_once(void)
 
 static void cap_im_wechat_poll_task(void *arg)
 {
+    int64_t last_unconfigured_log_ms = 0;
+
     (void)arg;
+
+    ESP_LOGI(TAG, "WeChat poll task started");
 
     while (!s_wechat.stop_requested) {
         if (!s_wechat.configured) {
+            int64_t now_ms = cap_im_wechat_now_ms();
+
+            if ((now_ms - last_unconfigured_log_ms) >= CAP_IM_WECHAT_UNCONFIGURED_LOG_INTERVAL_MS) {
+                ESP_LOGW(TAG,
+                         "WeChat poll idle: gateway not configured (token=%s base_url=%s)",
+                         s_wechat.token[0] ? "set" : "empty",
+                         s_wechat.base_url[0] ? "set" : "empty");
+                last_unconfigured_log_ms = now_ms;
+            }
             vTaskDelay(pdMS_TO_TICKS(5000));
             continue;
         }
 
-        if (cap_im_wechat_poll_once() != ESP_OK) {
-            ESP_LOGW(TAG, "WeChat polling failed, retrying");
-            vTaskDelay(pdMS_TO_TICKS(CAP_IM_WECHAT_RETRY_DELAY_MS));
+        {
+            esp_err_t err = cap_im_wechat_poll_once();
+
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "WeChat polling failed (%s), retrying", esp_err_to_name(err));
+                vTaskDelay(pdMS_TO_TICKS(CAP_IM_WECHAT_RETRY_DELAY_MS));
+            }
         }
     }
 
+    ESP_LOGW(TAG,
+             "WeChat poll task exiting (stop_requested=%d configured=%d)",
+             s_wechat.stop_requested,
+             s_wechat.configured);
     s_wechat.poll_task = NULL;
     claw_task_delete(NULL);
 }
@@ -2272,6 +2294,14 @@ esp_err_t cap_im_wechat_set_client_config(const cap_im_wechat_client_config_t *c
         return ESP_ERR_INVALID_ARG;
     }
 
+    if (!config->token[0] || !config->base_url[0]) {
+        ESP_LOGW(TAG,
+                 "Reject empty WeChat client config update (token=%s base_url=%s)",
+                 config->token[0] ? "set" : "empty",
+                 config->base_url[0] ? "set" : "empty");
+        return ESP_ERR_INVALID_ARG;
+    }
+
     ESP_RETURN_ON_ERROR(cap_im_wechat_ensure_state(), TAG, "alloc state failed");
 
     strlcpy(s_wechat.token, config->token, sizeof(s_wechat.token));
@@ -2418,6 +2448,34 @@ esp_err_t cap_im_wechat_qr_login_get_status(cap_im_wechat_qr_login_status_t *out
     strlcpy(out_status->base_url,
             s_wechat.qr.base_url[0] ? s_wechat.qr.base_url : CAP_IM_WECHAT_DEFAULT_BASE_URL,
             sizeof(out_status->base_url));
+    cap_im_wechat_unlock();
+    return ESP_OK;
+}
+
+esp_err_t cap_im_wechat_get_runtime_status(cap_im_wechat_runtime_status_t *out_status)
+{
+    esp_err_t err;
+
+    if (!out_status) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ESP_RETURN_ON_ERROR(cap_im_wechat_ensure_state(), TAG, "alloc state failed");
+
+    err = cap_im_wechat_lock();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    memset(out_status, 0, sizeof(*out_status));
+    out_status->configured = s_wechat.configured;
+    out_status->stop_requested = s_wechat.stop_requested;
+    out_status->poll_task_running = (s_wechat.poll_task != NULL);
+    out_status->qr_task_running = (s_wechat.qr_task != NULL);
+    out_status->token_set = (s_wechat.token[0] != '\0');
+    out_status->base_url_set = (s_wechat.base_url[0] != '\0');
+    out_status->poll_timeout_ms = s_wechat.poll_timeout_ms;
+
     cap_im_wechat_unlock();
     return ESP_OK;
 }

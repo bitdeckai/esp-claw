@@ -46,6 +46,16 @@ typedef struct {
     char base_url[160];
 } cap_im_wechat_qr_login_status_t;
 
+typedef struct {
+    bool configured;
+    bool stop_requested;
+    bool poll_task_running;
+    bool qr_task_running;
+    bool token_set;
+    bool base_url_set;
+    int poll_timeout_ms;
+} cap_im_wechat_runtime_status_t;
+
 esp_err_t cap_im_wechat_register_group(void);
 esp_err_t cap_im_wechat_set_client_config(const cap_im_wechat_client_config_t *config);
 esp_err_t cap_im_wechat_set_attachment_config(
@@ -56,6 +66,7 @@ esp_err_t cap_im_wechat_send_text(const char *chat_id, const char *text);
 esp_err_t cap_im_wechat_send_image(const char *chat_id, const char *path, const char *caption);
 esp_err_t cap_im_wechat_qr_login_start(const char *account_id, bool force);
 esp_err_t cap_im_wechat_qr_login_get_status(cap_im_wechat_qr_login_status_t *out_status);
+esp_err_t cap_im_wechat_get_runtime_status(cap_im_wechat_runtime_status_t *out_status);
 esp_err_t cap_im_wechat_qr_login_cancel(void);
 esp_err_t cap_im_wechat_qr_login_mark_persisted(void);
 

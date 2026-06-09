@@ -15,6 +15,7 @@ static struct {
     struct arg_lit *set_config;
     struct arg_lit *start;
     struct arg_lit *stop;
+    struct arg_lit *status;
     struct arg_str *send_text;
     struct arg_str *send_image;
     struct arg_str *token;
@@ -85,6 +86,27 @@ static int cmd_wechat_stop(void)
     return 0;
 }
 
+static int cmd_wechat_status(void)
+{
+    cap_im_wechat_runtime_status_t status = {0};
+    esp_err_t err = cap_im_wechat_get_runtime_status(&status);
+
+    if (err != ESP_OK) {
+        printf("wechat_status failed: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+
+    printf("configured=%d stop_requested=%d poll_task_running=%d qr_task_running=%d token_set=%d base_url_set=%d poll_timeout_ms=%d\n",
+           status.configured,
+           status.stop_requested,
+           status.poll_task_running,
+           status.qr_task_running,
+           status.token_set,
+           status.base_url_set,
+           status.poll_timeout_ms);
+    return 0;
+}
+
 static int cmd_wechat_send_text(const char *chat_id, const char *text)
 {
     esp_err_t err = cap_im_wechat_send_text(chat_id, text);
@@ -122,6 +144,7 @@ static int wechat_func(int argc, char **argv)
     }
 
     operation_count = wechat_args.set_config->count + wechat_args.start->count +
+                      wechat_args.status->count +
                       wechat_args.stop->count + wechat_args.send_text->count +
                       wechat_args.send_image->count;
     if (operation_count != 1) {
@@ -135,6 +158,10 @@ static int wechat_func(int argc, char **argv)
 
     if (wechat_args.start->count) {
         return cmd_wechat_start();
+    }
+
+    if (wechat_args.status->count) {
+        return cmd_wechat_status();
     }
 
     if (wechat_args.stop->count) {
@@ -164,6 +191,7 @@ void register_cap_im_wechat(void)
 {
     wechat_args.set_config = arg_lit0("c", "set-config", "Set WeChat client config");
     wechat_args.start = arg_lit0(NULL, "start", "Start the WeChat gateway");
+    wechat_args.status = arg_lit0(NULL, "status", "Print WeChat gateway runtime status");
     wechat_args.stop = arg_lit0(NULL, "stop", "Stop the WeChat gateway");
     wechat_args.send_text = arg_str0(NULL, "send-text", "<chat_id>", "Send text to a WeChat chat");
     wechat_args.send_image =
@@ -187,6 +215,7 @@ void register_cap_im_wechat(void)
         "Examples:\n"
         " wechat --set-config --token abc --base-url https://ilinkai.weixin.qq.com\n"
         " wechat --start\n"
+        " wechat --status\n"
         " wechat --stop\n"
         " wechat --send-text room123 --text \"hello\"\n"
         " wechat --send-image room123 --path /spiffs/a.jpg --caption \"hi\"\n",
