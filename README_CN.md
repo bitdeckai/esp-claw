@@ -227,6 +227,49 @@ ESP-Claw 目前仍处于活跃开发阶段，欢迎向我们提交 Issue 反馈�
 
 Agent Loop 和 IM 通讯等功能在 ESP32 上的实现参考了 [MimiClaw](https://github.com/memovai/mimiclaw)。
 
+## 前端网页编译（Web UI）
+
+当你修改了 Web 页面源码（目录：`application/edge_agent/components/http_server/frontend_source`）时，需要先编译前端，再编译固件。
+
+> [!IMPORTANT]
+>
+> `idf.py build` 会检查 `application/edge_agent/components/http_server/frontend_source/dist/index.html.gz` 是否存在；若不存在会直接失败。
+
+### 1) 安装前端依赖（首次或依赖变化时）
+
+```bash
+cd application/edge_agent/components/http_server/frontend_source
+pnpm install --frozen-lockfile
+```
+
+### 2) 构建前端
+
+```bash
+pnpm run build
+```
+
+构建产物会输出到 `dist/`，并由固件构建阶段自动嵌入。
+
+### 3) 继续编译并烧录固件
+
+```bash
+cd ../../../../
+idf.py build
+idf.py flash monitor
+```
+
+### 可选：本地预览前端
+
+```bash
+pnpm run dev
+# 或
+pnpm run serve
+```
+
+说明：
+- 推荐使用 `pnpm`（不是 `pnmp`）。
+- 如果 Vite 提示 Node 版本不兼容，请升级到兼容版本后再构建。
+
 ## Windows 本地烧录快速指南
 
 如果你在 Windows 上使用 ESP-IDF 5.5.x 进行本地编译和烧录，下面这套流程可以规避常见的多版本环境混用问题。
@@ -247,11 +290,16 @@ idf.py --version
 ```bat
 cd /d E:\0_project\Kode\kodeclaw\esp-claw\application\edge_agent
 pip install esp-bmgr-assist
-idf.py gen-bmgr-config -c .\boards -b <board_name>
+idf.py gen-bmgr-config -c .\boards -b kode_dot
 idf.py fullclean
 idf.py build
 idf.py -p COMx flash monitor
 ```
+
+说明：
+- Kode Dot 的 `board_name` 就是 `kode_dot`。
+- 如果不确定可用板卡名，先执行 `idf.py gen-bmgr-config -c .\boards -l` 查看列表。
+- Kode Dot 板级目录：`application/edge_agent/boards/kodediy/kode_dot`。
 
 3. 如需查询支持板卡和串口：
 
@@ -279,3 +327,38 @@ H:\esp32_v5.54\Espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe -m pip 
 
 - 现象：在 ESP-IDF 不同版本之间切换后，构建行为异常。
   - 处理：构建前先执行 `idf.py fullclean`。
+
+## Kode Dot 基础硬件信息
+
+以下为 Kode Dot 的基础参数与器件清单（用于 ESP-Claw 编译、烧录与板级联调）：
+
+### 1) 基础参数
+
+| 项目 | 参数 |
+| --- | --- |
+| 芯片 | ESP32-S3 |
+| Flash | 32 MB |
+| RAM（外置 PSRAM） | 8 MB（Octal，80 MHz） |
+
+参数来源：`application/edge_agent/boards/kodediy/kode_dot/sdkconfig.defaults.board`。
+
+### 2) 器件自检清单
+
+| 模块 | 器件/功能 | 状态 |
+| --- | --- | --- |
+| 主控 | ESP32-S3 主控芯片 |  |
+| 电源芯片 | BQ25896RTWR |  |
+| 电源芯片 | BQ27220YZFR |  |
+| 喇叭和录音 | CH98357/MAX98357 |  |
+| 喇叭和录音 | ICS-43434 |  |
+| 触摸和显示 | CO5300 显示屏控制 |  |
+| 触摸和显示 | CST820 触摸屏 |  |
+| 加速度计陀螺仪 | LSM6DSOWTR |  |
+| 磁力计 | LIS2MDLTR |  |
+| IO 扩展 | TCA9535RTWR |  |
+| 三色LED灯 | WS2812B-2020 |  |
+| Flash存储块 | BY25Q256FSSIG |  |
+| Flash存储块 | MX25UM25645GMI00（默认没焊接） | N/A |
+| 时钟RTC | RV-3028-C7 |  |
+| 时钟RTC | MAX31329ELB（默认没焊接） | N/A |
+| microSD 卡 | SD 卡功能 |  |

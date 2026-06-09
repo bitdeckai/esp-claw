@@ -250,3 +250,38 @@ H:\esp32_v5.54\Espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe -m pip 
 
 - Symptom: switching between ESP-IDF versions causes unexpected build behavior.
   - Fix: run `idf.py fullclean` before rebuilding.
+
+## Kode Dot Basic Hardware
+
+The Kode Dot baseline specs and component checklist below are used for ESP-Claw build, flashing, and board bring-up.
+
+### 1) Baseline Specs
+
+| Item | Spec |
+| --- | --- |
+| Chip | ESP32-S3 |
+| Flash | 32 MB |
+| RAM (external PSRAM) | 8 MB (Octal, 80 MHz) |
+
+Source: `application/edge_agent/boards/kodediy/kode_dot/sdkconfig.defaults.board`.
+
+### 2) Component Bring-up Checklist
+
+| Module | Device / Function | Status |
+| --- | --- | --- |
+| Main SoC | ESP32-S3 main chip |  |
+| Power IC | BQ25896RTWR |  |
+| Power IC | BQ27220YZFR |  |
+| Speaker and Recording | CH98357 / MAX98357 |  |
+| Speaker and Recording | ICS-43434 |  |
+| Touch and Display | CO5300 display control |  |
+| Touch and Display | CST820 touch panel |  |
+| IMU (Accel/Gyro) | LSM6DSOWTR |  |
+| Magnetometer | LIS2MDLTR |  |
+| IO Expander | TCA9535RTWR |  |
+| RGB LED | WS2812B-2020 |  |
+| Flash Storage | BY25Q256FSSIG |  |
+| Flash Storage | MX25UM25645GMI00 (not populated by default) | N/A |
+| RTC | RV-3028-C7 |  |
+| RTC | MAX31329ELB (not populated by default) | N/A |
+| microSD | SD card function |  |
